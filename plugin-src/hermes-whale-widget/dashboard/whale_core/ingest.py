@@ -623,7 +623,28 @@ def ingest_turn(conn, payload: Any, *, now: int | None = None) -> dict[str, Any]
     if not inserted:
         # lost a race against a concurrent identical write — report honestly
         return {"status": "duplicate", "accepted": 0, "duplicate": 1, "aligned": False}
-    return {"status": "accepted", "accepted": 1, "duplicate": 0, "aligned": False}
+    # M8 cross-package contract: ``settled`` lists the turns that produced
+    # ledger rows (accepted only — duplicate/aligned/skipped responses keep
+    # their previous shape exactly; field names pinned by the contract test).
+    result: dict[str, Any] = {
+        "status": "accepted", "accepted": 1, "duplicate": 0, "aligned": False,
+        "settled": [{
+            "dedup_key": dedup_key,
+            "estimated_cost_units": units,
+            "currency": currency,
+            "cost_basis": cost_basis,
+        }],
+    }
+    try:  # M8 reminder hooks — strictly best-effort: never fail the settlement
+        from . import rules  # (function-level import: rules reads ingest's day key)
+        rules.evaluate_turn_cost(
+            conn, dedup_key=dedup_key, estimated_cost_units=units,
+            currency=currency, model=p["model"], cost_basis=cost_basis, now=ts,
+        )
+        rules.evaluate_daily_budget(conn, now=ts)
+    except Exception as exc:  # noqa: BLE001 - reminders never touch return/tx semantics
+        log.warning("reminder rules skipped: %s", type(exc).__name__)
+    return result
 
 
 def ingest_batch(conn, payloads: list[Any], *, now: int | None = None) -> dict[str, Any]:
@@ -636,12 +657,14 @@ def ingest_batch(conn, payloads: list[Any], *, now: int | None = None) -> dict[s
     duplicate = 0
     aligned = False
     skipped = 0
+    settled: list[dict[str, Any]] = []
     for payload in payloads:
         result = ingest_turn(conn, payload, now=now)
         accepted += result["accepted"]
         duplicate += result["duplicate"]
         aligned = aligned or bool(result.get("aligned"))
         skipped += 1 if result.get("skipped") else 0
+        settled.extend(result.get("settled") or [])
     response: dict[str, Any] = {
         "status": "accepted" if accepted > 0 else "duplicate",
         "accepted": accepted,
@@ -651,6 +674,8 @@ def ingest_batch(conn, payloads: list[Any], *, now: int | None = None) -> dict[s
         response["aligned"] = True
     if skipped:
         response["skipped"] = skipped
+    if settled:
+        response["settled"] = settled  # M8: accepted turns only (cross-package contract)
     return response
 
 

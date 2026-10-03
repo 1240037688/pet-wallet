@@ -33,6 +33,13 @@ function mountContribution(contrib) {
     const container = document.getElementById('statusbar-right')
     const root = createRoot(container)
     root.render(contrib.render())
+  } else if (contrib.area === 'panes') {
+    // floating pane (M5): the preview mounts the pane body in #pane-slot
+    // (native drag/clamping is pane-shell territory and not shimmed here)
+    const container = document.getElementById('pane-slot')
+    container.innerHTML = ''
+    const root = createRoot(container)
+    root.render(contrib.render())
   } else {
     const container = document.getElementById('other-areas')
     const row = document.createElement('div')

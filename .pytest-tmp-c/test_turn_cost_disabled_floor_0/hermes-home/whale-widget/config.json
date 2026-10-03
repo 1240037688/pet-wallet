@@ -1,0 +1,18 @@
+{
+  "balance_poll_seconds": 60,
+  "bubbles": {
+    "enabled": true,
+    "turn_cost_ttl_ms": 5000
+  },
+  "reminders": {
+    "balance_low_enabled": true,
+    "budget_enabled": true,
+    "turn_cost_enabled": false
+  },
+  "thresholds": {
+    "balance_low": null,
+    "daily_budget": null,
+    "turn_cost_min": 0.01
+  },
+  "usage_summary_poll_seconds": 30
+}

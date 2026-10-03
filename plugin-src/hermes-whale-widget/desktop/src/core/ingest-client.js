@@ -32,6 +32,10 @@ const defaultDelay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
  * @param {(info: {reason: string}) => void} [opts.onUnavailable]
  * @param {() => void} [opts.onRecovered]
  * @param {() => void} [opts.onStats]  invoked whenever queue/dead-letter state settles
+ * @param {(results: unknown[], turns: unknown[]) => void} [opts.onSettled]  per-turn cost
+ *   results from the ingest response (`settled: [{dedup_key, estimated_cost_units,
+ *   currency, cost_basis}]`, WP-2 contract); invoked ONLY when the response carries a
+ *   settled ARRAY — anything else keeps the previous behaviour. Never let it throw.
  */
 export function createIngestClient({
   rest,
@@ -44,6 +48,7 @@ export function createIngestClient({
   onUnavailable,
   onRecovered,
   onStats,
+  onSettled,
 } = {}) {
   if (typeof rest !== 'function') throw new TypeError('createIngestClient: rest adapter is required')
 
@@ -89,6 +94,16 @@ export function createIngestClient({
         const response = await rest(INGEST_TURN_PATH, { turns })
         setRecovered()
         state.sent += turns.length
+        // Defensive cross-package contract (WP-2): the response MAY carry
+        // `settled: [...]` per-turn cost results. Only an ARRAY is forwarded;
+        // missing/malformed fields keep the behaviour identical to before.
+        if (Array.isArray(response?.settled) && typeof onSettled === 'function') {
+          try {
+            onSettled(response.settled, turns)
+          } catch {
+            /* UI callbacks must never break the client */
+          }
+        }
         return response
       } catch (err) {
         if (attempt >= maxRetries) {

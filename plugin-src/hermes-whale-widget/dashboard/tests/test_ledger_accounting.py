@@ -65,7 +65,10 @@ def _rows(conn, table, order="id"):
 
 def test_acc01_usage_event_and_turn_cost_written(conn):
     res = ingest_turn(conn, _turn())
-    assert res == {"status": "accepted", "accepted": 1, "duplicate": 0, "aligned": False}
+    # M8 settled contract: accepted responses also carry the settled array
+    assert res["status"] == "accepted"
+    assert res["accepted"] == 1 and res["duplicate"] == 0 and res["aligned"] is False
+    assert len(res["settled"]) == 1
 
     events = _rows(conn, "usage_event")
     costs = _rows(conn, "turn_cost")

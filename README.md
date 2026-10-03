@@ -10,8 +10,8 @@ Hermes 桌面「小鲸鱼记账挂件」：AI 用量记账 + 余额/消费展示
 
 ## 项目状态
 
-**Phase：调研与文档阶段（Milestone 0 之前）** — 尚未开始业务编码。
-当前在执行：参考项目剖析 → Hermes 架构审计 → 可行性矩阵 → 架构决策 → 实施计划。
+**MVP（M0–M8）代码闭环完成（2026-10-04）**：usage 捕获→幂等账本→计价→余额差分→鲸鱼浮窗显示→单轮消费泡泡→今日消费→提醒（余额/预算/等待/审批观测）全部落地；音效引擎核心完成（待接线）。测试：pytest 180 / node 185 全绿。
+后续：M9 音效接线、M10 自制素材、M11 多 Provider、M12 设置 UI、M13 打包。
 
 ## 环境事实
 
@@ -43,8 +43,20 @@ tools/         开发脚本
 
 ## 开发与测试
 
-Milestone 0 建立脚手架后回填。（注意：本机约束禁止直接写 `D:\hermes\desktop-plugins` 部署调试，
-需要用户手动复制或另行授权；详见 AGENTS.md §0。）
+在项目根目录执行（Python 用项目内 `.venv`）：
+
+```text
+node tools/build-desktop.mjs                  # 构建 desktop 半体单文件 ESM
+npm test                                      # JS 测试（node:test）
+.venv/Scripts/python.exe -m pytest plugin-src/hermes-whale-widget/dashboard/tests -q --basetemp=.pytest-tmp
+node tools/check-security.mjs                 # 产物级安全自检（必须通过）
+.venv/Scripts/python.exe tools/check-security.py   # 全源码安全自检（必须通过）
+node tools/dev-preview.mjs                    # SDK shim 预览页（不触碰 Hermes）
+```
+
+部署验证受「不改 `D:\hermes`」约束：真机部署需用户手动复制插件目录到
+`D:\hermes\plugins\whale-widget\` 并在 `config.yaml` 的 `plugins.enabled` 加名后重启 App
+（Python 半体启用需重启；桌面半体在 Plugins 页 opt-in）。
 
 ## 功能清单（目标）
 
@@ -54,9 +66,19 @@ Hermes 会话 usage 联动、设置与持久化。完整可行性分级见 `docs
 
 ## 已实现 / 未实现 / 已知限制
 
-- 已实现：无（尚未编码）。
-- 未实现：全部（见 `docs/plans/IMPLEMENTATION_PLAN.md` 的 Milestone 划分）。
-- 已知限制：随调查更新。
+**已实现（MVP）**：usage 事件捕获与归一化（幂等去重 + 断线重连对齐）、SQLite 账本（幂等落库/水位/归档）、
+三级计价（hermes_estimate > 价目表 > 诚实 NULL）、DeepSeek 余额轨②（差分记账/五状态机/显式校正 409/观测缺口 partialDay）、
+state.db 只读交叉校验（轨③留桩）、鲸鱼 floating pane（可拖拽，SDK 原生浮卡）、五态情绪状态机、
+泡泡引擎（DSH Row/Module schema 子集 + 加权随机 + avoidIdx + 优先队列）、余额/预算/每轮消费提醒（持久去重）、
+question（clarify 工具事件）与 approval（agent 半体 hook → 状态文件）等待观测、statusbar 芯片、
+Web Audio 音效引擎核心（DSH 语义：同步起播/衔接排期/音量三态/mute）。
+
+**未实现**：音效引擎 main.js 接线（M9 收尾）、正式鲸鱼素材（M10，DSH 素材不可复用需自制）、
+多 Provider 模板（M11，现仅 DeepSeek）、设置 UI（M12）、打包安装（M13）、独立透明窗口（Phase 2 可选）。
+
+**已知限制**：估算值与真实观测严格分列（UI 带「估算」角标）；DSH 同分钟同内容两轮的残留风险 R2；
+余额 API 字段时效未自动探测（模板带 unverified 标注）；未计价轮成本显示「—」绝不按 0 计；
+Python 半体启用需重启 App；真机冒烟（事件 payload 实形状/浮窗视觉）待用户部署验证。
 
 ## 参考项目
 

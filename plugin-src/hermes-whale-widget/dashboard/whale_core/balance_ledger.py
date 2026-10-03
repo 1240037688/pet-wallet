@@ -123,6 +123,15 @@ def record_snapshot(
             observed_from=int(prev["fetched_at"]), observed_to=fetched_at,
         )
     conn.commit()
+    try:  # M8 reminder hook — strictly best-effort: never blocks the booking chain
+        from . import rules  # function-level: keeps this module import-light
+
+        rules.evaluate_balance_low(
+            conn, scope=scope, currency=currency,
+            observed_balance_units=observed_balance_units, now=fetched_at,
+        )
+    except Exception as exc:  # noqa: BLE001 - reminders never touch return/tx semantics
+        log.warning("balance_low rule skipped: %s", type(exc).__name__)
     return {
         "inserted": bool(inserted),
         "day": day,

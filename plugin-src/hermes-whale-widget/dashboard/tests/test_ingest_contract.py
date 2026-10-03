@@ -46,7 +46,12 @@ def test_batch_shape_counts(client):
     second = {**TURN, "session_id": "sess-2"}
     res = client.post(f"{MOUNT_PREFIX}/ingest/turn", json={"turns": [TURN, second]})
     assert res.status_code == 200
-    assert res.json() == {"status": "accepted", "accepted": 2, "duplicate": 0}
+    body = res.json()
+    assert body["status"] == "accepted"
+    assert body["accepted"] == 2
+    assert body["duplicate"] == 0
+    # M8 cross-package contract: accepted responses carry the settled array
+    assert len(body["settled"]) == 2
 
 
 @pytest.mark.parametrize(

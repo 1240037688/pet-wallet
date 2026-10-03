@@ -88,9 +88,11 @@ test('built artifact registers under the shimmed runtime', async (t) => {
   const { notifications } = await import('./shims/sdk-shim.mjs')
   assert.ok(notifications.length >= 1, 'host.notify self-check toast fired')
 
-  // health probe: ctx.rest is namespace-relative → '/health'
+  // health probe fires first: ctx.rest is namespace-relative → '/health'.
+  // The M5+ pane wiring adds its own calls (/config, /balance, /usage/summary,
+  // /wait-state) — tolerated here, asserted in main-wiring.test.mjs.
   await settled()
-  assert.deepEqual(restCalls.map((c) => c.path), ['/health'])
+  assert.equal(restCalls[0]?.path, '/health')
   assert.equal(mod.$health.get().state, 'ok')
   assert.equal(mod.$health.get().version, '0.1.0')
 

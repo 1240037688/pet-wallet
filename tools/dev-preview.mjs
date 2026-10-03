@@ -70,6 +70,37 @@ const MOCK_HEALTH = {
   contract_probe: null,
 }
 
+// M5/M8 wiring mocks: the pane polls these via ctx.rest (namespace-relative).
+const MOCK_CONFIG = {
+  balance_poll_seconds: 60,
+  usage_summary_poll_seconds: 30,
+  reminders: { balance_low_enabled: true, budget_enabled: true, turn_cost_enabled: true },
+  thresholds: { balance_low: null, daily_budget: null },
+  bubbles: { enabled: true, turn_cost_ttl_ms: 5000 },
+}
+const MOCK_BALANCE = {
+  credential: { configured: true },
+  state: 'ok',
+  observed_balance_units: 1234500000,
+  currency: 'CNY',
+  fetched_at: null,
+  error: null,
+}
+const MOCK_SUMMARY = {
+  estimated_today_units: 456700000,
+  turns_today: 12,
+  unpriced_today: 0,
+  estimated_today: [{ currency: 'CNY' }],
+}
+const MOCK_WAIT_STATE = { slots: [] }
+// settled array exercises the WP-2 turn-cost contract in the preview
+const MOCK_INGEST = {
+  status: 'accepted',
+  accepted: 1,
+  duplicate: 0,
+  settled: [{ dedup_key: 'preview-turn', estimated_cost_units: 42000000, currency: 'CNY', cost_basis: 'preview' }],
+}
+
 // ── preview page ─────────────────────────────────────────────────────────────
 const PREVIEW_HTML = `<!doctype html>
 <html lang="en">
@@ -138,10 +169,28 @@ const server = http.createServer((req, res) => {
   if (url.pathname === '/api/plugins/whale-widget/health') {
     return send(res, 200, JSON.stringify(MOCK_HEALTH), 'application/json')
   }
+  if (url.pathname === '/api/plugins/whale-widget/config') {
+    return send(res, 200, JSON.stringify(MOCK_CONFIG), 'application/json')
+  }
+  if (url.pathname === '/api/plugins/whale-widget/balance') {
+    return send(res, 200, JSON.stringify(MOCK_BALANCE), 'application/json')
+  }
+  if (url.pathname === '/api/plugins/whale-widget/usage/summary') {
+    return send(res, 200, JSON.stringify(MOCK_SUMMARY), 'application/json')
+  }
+  if (url.pathname === '/api/plugins/whale-widget/wait-state') {
+    return send(res, 200, JSON.stringify(MOCK_WAIT_STATE), 'application/json')
+  }
+  if (url.pathname === '/api/plugins/whale-widget/ingest/wait-event') {
+    return send(res, 200, JSON.stringify({ ok: true }), 'application/json')
+  }
+  if (url.pathname === '/api/plugins/whale-widget/ingest/turn' && req.method === 'POST') {
+    return send(res, 200, JSON.stringify(MOCK_INGEST), 'application/json')
+  }
   send(res, 404, 'not found', 'text/plain')
 })
 
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`dev-preview: http://127.0.0.1:${PORT}/`)
-  console.log('acceptance: chip shows "● Whale widget placeholder · ok · v0.1.0 (schema 1)"; window.__preview.errors empty')
+  console.log('acceptance: chip shows "● Whale widget · ok · v0.1.0 (schema 1)", the whale pane mounts in the pane slot (balance 12.35 CNY / today 4.56 CNY), window.__preview.errors empty')
 })

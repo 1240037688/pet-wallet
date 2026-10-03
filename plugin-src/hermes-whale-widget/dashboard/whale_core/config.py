@@ -54,6 +54,8 @@ DEFAULTS: dict[str, Any] = {
         # None = unset (null ≠ 0 semantics, DATA_MODEL §8.3)
         "balance_low": None,
         "daily_budget": None,
+        # M8 per-turn notification floor (decimal currency amount; None = no floor)
+        "turn_cost_min": None,
     },
     # Bubbles (M7 consumes; M0 only stores)
     "bubbles": {

@@ -126,3 +126,164 @@ M3 Pricing（`pricing.py` 三级 basis + `money.js` 1e8 定点与 Python 同向�
 
 ### 下一阶段
 M5 基础鲸鱼（floating pane SDK 探查 + 透明/置顶边界确认）→ M6 鲸鱼状态。
+
+## 2026-10-03 — M9 音效引擎核心（WP-3 子代理：engine.js + 引擎单测；main.js 接线与构建留待集成步骤/WP-1）
+
+### 完成了什么
+
+- `desktop/src/sound/engine.js`（重写 M0 stub，≈420 行）：DSH §E1 语义的 Web Audio 引擎核心，**全部 Web Audio 对象经注入的 `contextFactory` 创建**（单测跑 fake context，绝不触碰真实音频设备）。能力：
+  - **同步起播路径**：`press()`/`release()`/`play()`/`preview()` 全同步、不 await 解码 promise——clip 未就绪跳过本次播放，后台 fetch+decode 继续并进缓存；
+  - **URL 级缓存**：同 URL 只 fetch 一次、decode 一次，跨事件共享；`fetchClip` 返回 null（204 风格空响应）→ `empty` 终态、0 字节绝不进 decodeAudioData；decode 失败 → `failed` 终态**不再重试**，经 `onDebug` 记 debug 风格回调、不 throw；
+  - **release 排期**：`press()` 记锚点（起播音频时刻 + 按压音时长），`release()` 用纯函数 `computeReleaseStart` 排期到「按压起点 + 按压音长 − 40ms」（`RELEASE_LEAD_SEC=0.04`），取 `max(now, 排期点)`——短按无缝衔接、长按立即播；无锚点（按压音未就绪/被静音截断）退化为松手立即播；
+  - **音量三态**：每事件槽位 `{vol, volSet}`，`volSet=false`（未显式拖过滑块）跟随全局按压音量（纯函数 `resolveVolume`），`explicit=true` 用自身值（区分「默认 100%」与「设了 100%」）；`setVolume('global'|kind, v)` 带 [0,1] clamp、非数值忽略；**mute 最高优先级**——静音时不建 context、不取流、停掉在播/已排期节点；
+  - **AudioContext 生命周期**：懒创建（首次非静音播放/预热时，`latencyHint:'interactive'`），**绝不 close**（任务结束音非手势触发）；空闲 `IDLE_SUSPEND_MS=60s` → `suspend()`（注入时钟可测，节流只挂起一次），再次播放前 `resume()` 先于 `start()`；主动 60s 定时器为**严格 opt-in**（`setTimer` 注入，序列号中和陈旧句柄，无需 clearTimer）——不注入则退化为「下次引擎调用时惰性检查挂起」，node 测试零悬挂定时器；
+  - **事件→clip 映射**：`SOUND_EVENTS = press/release/task_finished/question/approval`，`DEFAULT_CLIPS` 全 null=无声（结构先立）；`setClip/setClips/setSoundGroup`；**sound group 最小实现**——激活期间组槽位覆盖基础映射，空槽位 `''` = 该事件静音（不回退预设，DSH 语义），缺省槽位回退基础映射，`setSoundGroup(null)` 还原；
+  - `preview(event)` 试听：绕过总静音（面板用户手势），仍遵循映射与音量解析；`warm()` 预取+预解码（返回仍在解码的 url 列表）；`dispose()` 停全部节点+取消定时器，不 close context。
+- `desktop/tests/sound-engine.test.mjs`（新增，27 个测试组）：fake AudioContext/AudioBufferSourceNode/GainNode/decodeAudioData + 注入时钟/定时器，断言 start/stop/suspend/resume/decode 调用序列与精确排期时刻；覆盖上述全部可测子集 + `computeReleaseStart`/`resolveVolume`/`clampVolume` 纯函数向量。
+
+### 设计变化 / 与计划偏差
+
+1. **warm 不随 setClip 自动触发**：`setClip/setSoundGroup` 只改映射，预取需集成层在解锁手势后显式 `engine.warm()`——避免建 context 早于首个手势（自动播放策略）；冷缓存首次播放跳过一次后后台解码，与 DSH「预热后起播走同步路径」等价。
+2. **空闲 suspend 惰性兜底 + 定时器 opt-in**：无 `setTimer` 时挂起由下一次引擎调用惰性判定（纯注入时钟可测）；注入后才有主动 60s 定时器（生产接线建议传 `setTimeout` 包装）。
+3. **mute 强于 DSH 原语义**：除守卫外还 `stop()` 在播/已排期节点并清按压锚点（「总开关关=立即静」）；DSH 仅 135 处守卫。
+4. **DSH `_alt` 备用路由（204/失败切换重取）不进引擎**：属取流策略，留给注入的 `fetchClip` 实现；引擎只按 URL 缓存终态（empty/failed 不重试）。
+5. **`pending` 态（超出 DSH 的小扩展）**：静音期间已到达的字节挂起持有，解除静音时才解码（静音期间绝不建 context）；代价是持有一份已取流数据。
+6. `play(event, {at})` 的 `at` 定为**绝对音频时钟时刻**（`max(now, at)` 钳制），与 release 排期同一语义；DSH 原生 `playAt(delay)` 为相对时延——集成层如需相对时延自行加 `ctx.currentTime`。
+
+### 测试结果（真实输出）
+
+- `node --test plugin-src/hermes-whale-widget/desktop/tests/sound-engine.test.mjs` → **27 passed, 0 failed**（时长 284ms）。
+- `node tools/check-security.mjs` → **OK**（产物未被本任务触碰：engine.js 尚未被 main.js import，不进构建产物）。
+- `.venv/Scripts/python.exe tools/check-security.py` → **OK**（扫描 97 文件，含新增 engine.js 与测试文件）。
+- 未运行 `node tools/build-desktop.mjs`（任务书禁止；WP-1 负责构建）；未 commit。
+
+### 未解决问题
+
+- main.js 尚未接线（本任务书禁止）：引擎无人调用，真实声音路径未验证；M9 验收的「真机四类事件音各触发一次/最小化无爆音」留待集成 + 真机冒烟。
+- 真实 AudioContext 行为差异（设备切换、Electron 自动播放策略、suspend 后时钟冻结细节）未验证——计划内 M9 风险项。
+- 试听「不误伤真实事件音」的 UI 侧登记（DSH `dshwvPreviewMark`）属设置面板职责，不在引擎层。
+
+### 下一阶段
+
+集成步骤：main.js 按 engine 接口接线（见下）→ WP-1 构建回归 → 素材（M10：自产/CC0）落 `assets/` 后由 `setClip` 注入。
+
+**main.js 接线接口（供集成参考）**：`createSoundEngine({ contextFactory: () => new AudioContext({ latencyHint: 'interactive' }), now: () => Date.now(), fetchClip, onDebug, setTimer: (fn, ms) => setTimeout(fn, ms) })`；`fetchClip(url) → Promise<ArrayBuffer|null>`（null=空响应；_alt 备路由在此实现）；解锁手势后 `warm()`；`setClip(event, url)`/`setSoundGroup({id, clips})` 配映射；`setVolume('global'|kind, v, {explicit})`（volSet 需在 storage 里与 vol 分开持久化）；`press()`/`release()` 挂 M6 交互，`play('task_finished'/'question'/'approval')` 挂事件沿，`preview(event)` 挂面板试听，`dispose()` 挂卸载。
+
+## 2026-10-03 — WP-1 完成：desktop 集成接线（M5/M6/M7/M8-A 进 main.js）+ 单元测试全覆盖
+
+### 完成了什么
+
+**集成（`desktop/src/main.js` 重写装配；`desktop/src/core/ingest-client.js` 最小改动）**：
+- **M5 floating pane**：`ctx.register({id: PANE_ID, area: PANES_AREA, title: 'Whale Widget', data: {placement:'floating', anchor:'bottom-right', width:'280px'}, render})`，render 返回 `jsx(WhalePane, {$balance,$summary,$dashboard,$whale,$bubble,controller})`（组件元素形式，保证 WhalePane/useValue 以 React 组件方式渲染）；statusbar chip 原样保留。
+- **M5 dataService**：`createDataService({rest})`；`GET /config` 失败→内建 DEFAULT_UI_CONFIG（60s/30s，镜像 whale_core DEFAULTS 的 JS 消费键）；启动后 `dataService.start(config)`；onDispose 统一调 `dataService.stop()`。
+- **M6 mood 接线**：`MOOD_EVENTS = {TASK_COMPLETED, USAGE_UPDATED, ERROR, APPROVAL_CLEARED}`——每个归一化事件命中即同步 `controller.event(kind)`；STREAM_TICK/TOOL_ACTIVITY 等不进 mood（动画纪律）。
+- **M7 turn-cost 泡泡（跨包契约，防御式）**：`createIngestClient` 新增可选 `onSettled(results, batchTurns)`——仅当响应带 `settled` 数组才回调（try/catch 包裹，UI 永不破坏 ingest 管线）；main.js 把每项转 `controller.turnSettled({dedup_key, estimated_cost_text: formatMoney(units,{currency}), session_id})`；units 非有限数→null→「—」，currency==='none'（M2 占位币种）→null；session_id 取 settled 项，单 turn 批次回退取批内 payload（dedup_key 是 Python 侧计算的，JS 无法反向匹配多 turn 批次）。
+- **M8-A clarify 转发**：SUBSCRIBED_EVENTS 增加 `tool.start`/`tool.complete`（此前 main.js 实际未订阅，任务书背景与现状不符，已按任务要求补齐）；TOOL_ACTIVITY 且 name==='clarify'（phase start/complete）→ `POST /ingest/wait-event`，body `{kind:'question', phase:'open'|'close', tool_id, session_id}`，tool_id 从原始 envelope payload 防御提取（tool_id→toolId→null）；fire-and-forget + 双层 catch，失败绝对静默（wait bridge 不影响记账）。
+- **M8 wait-state 轮询**：10s 间隔（与 `controller.tick()` 共用一个定时器，注册后立即先跑一次）→ `GET /wait-state` → `controller.syncWaiting({question: slots.length>0, approval: 同值})`；404/异常一律视为无等待（WP-2 未部署不报错、不崩溃）。
+- **生命周期**：单个 onDispose 钩子清三个定时器（health 60s / UI 10s）+ dataService.stop()；async 初始化与 dispose 竞态由 dataService 的 disposed 守卫兜住。
+- **main.js 新增 re-export**：`$whale/$bubble/$balance/$summary/$dashboard`（供 preview/测试观察产物内部状态）。
+
+**预览工具（最小改动）**：`tools/dev-preview.mjs` 增加 /config、/balance、/usage/summary、/wait-state、/ingest/turn（带 settled 示例）、/ingest/wait-event mock，使预览页能真实展示「余额/今日/泡泡」全链路；`tools/preview/preview-host.js` 将 `area==='panes'` 的贡献挂载进 #pane-slot（原生拖拽/钳制属 pane-shell，不在 shim 范围）。
+
+**测试（新增 10 个文件，node:test，沿用 tests/ 现有 shims/loader 写法）**：
+- `whale-state.test.mjs`（11）：press→release、连击窗口（注入时钟，含窗口边界=自上次点击起算）、TASK_COMPLETED/USAGE_UPDATED 瞬态与 2.5s 过期、waiting 粘住直至 cleared、STREAM_TICK 零影响（不续瞬态）、ERROR 清 waiting、press 压过瞬态、快照形状。
+- `money.test.mjs`（10）：与 Python 同向量——"110.00"→110e8、0.00000001→1、>8 位小数截断不进位、null/非法输入 throw（含越界 RangeError）、unitsToDecimalString、formatMoney 2 位/币种/负数/decimals 钳制、null→「—」、往返无损。
+- `balance-view.test.mjs`（14）：五状态→文本/徽标/hint 全钉——error 保留 last known 绝不显示 0（error+无旧值→「—」）、未配置→「—」+hint、zero 是真实 0、stale/error 徽标、todayView 估算徽标+未计价 hint、salvageView「未记账」token 快照。
+- `bubble-schema.test.mjs`（10）：结构拒绝（v/items）、行合并边界（连续同 row 合并、**非连续同 row 不合并**、缺省 row=数组下标）、≤6 模块/行、≤6 行/页（6 过 7 拒）、图片独占行、choice ≤2 与正整数权重、text/random_text/image/style 键校验、lib 校验。
+- `bubble-resolver.test.mjs`（10）：占位符缺失→「—」+missing 旗标、五类数据模块缺省/取值、random_text avoidIdx 换轴+MAX_REROLLS=6 封顶+单条不掷骰、choice 加权（注入 rng 确定性）且允许重复、stepIndex 环回、resolveAll、schema 错误冒泡、style 透传。
+- `bubble-queue.test.mjs`（12）：rank 优先级与抢占（budget>turn_cost>waiting>info）、同 rank 先插入可见、dedup 替换且**不重置 ttl**、ttl 过期（注入时钟）、sticky 不过期、advance 仅 tapAdvance+环回+重置 ttl、dismiss 按 key/可见顶、waiting 抢占可逆、clear、view 携带 resolver 输入。
+- `data-service.test.mjs`（7）：start 即刷+置 $dashboard ok、start 幂等、pokeSummary 2s 合流（注入时钟：1999 不刷 2000 刷）、start 前/stop 后 poke 安全、不可达→$dashboard unreachable+detail、stop 后零请求、floor 常量。
+- `controller.test.mjs`（13）：click 序列→greeting 出现→tap advance→stepIndex 推进；combo≥4 入队 idle-line（见偏差 4）；turnSettled 入队/缺省「—」/turnCostEnabled=false 静音/自定义 ttl 过期；syncWaiting 开（sticky+mood）与关（回 idle）；press/release；tick 重发布；setData。
+- `ingest-settled.test.mjs`（5）：onSettled 只在 settled 数组时以 (results, batchTurns) 触发、按批各自触发、无 settled/非数组保持旧行为、回调 throw 不破坏 flush、未提供回调时忽略。
+- `main-wiring.test.mjs`（9，经 loader 加载**构建产物**+mock ctx）：floating pane 贡献（area/data/title/render→whale-widget-pane 根节点）+chip 保留；/config→dataService 起轮询（$balance/$summary 置值）；settled→turn:k1 泡泡「0.42 CNY」+money mood；无 settled→行为不变；clarify open/close POST 形状+非 clarify 静默；wait-event 失败静默且记账继续；wait-state 有 slots→waiting mood、失败→无等待不崩；dispose 后零 REST 流量。
+- 既有 `register.test.mjs` 仅一处断言最小更新：原 `deepEqual(restCalls.paths, ['/health'])` 改为首调用为 '/health'+其余路径容忍（集成后 /config 等属合法新增面，在 main-wiring 中细断言）。
+
+### 测试结果（全部真实输出）
+
+- `npm test` → **185 passed, 0 failed**（既有 49 + WP-1 新增 109 + WP-3 sound-engine 27；node v22.19.0）。
+- `node tools/build-desktop.mjs` → OK（`desktop/plugin.js` 53.6KB 单文件 ESM；`dist/desktop/plugin.js` 副本同步；`node --check` 通过）。
+- `node tools/check-security.mjs` → OK；`.venv/Scripts/python.exe tools/check-security.py` → OK（97 文件）。
+- `.venv/Scripts/python.exe -m pytest plugin-src/hermes-whale-widget/dashboard/tests -q --basetemp=.pytest-tmp-a` → **1 failed, 123 passed**：`test_ledger_accounting.py::test_acc01_usage_event_and_turn_cost_written` 失败原因为 WP-2 并发改动自身滞后——`whale_core/ingest.py:626-637` 已按 M8 契约给 accepted 响应加了 `settled` 数组，而该测试仍断言旧响应形状（无 settled）。**属 WP-2 文件，未修**；该失败同时实锤了 WP-1 消费的契约形状（{dedup_key, estimated_cost_units, currency, cost_basis}，1e8 定点，仅 accepted 响应携带），与 main-wiring/ingest-settled 测试的防御式消费一致。
+- dev-preview：服务器与全部端点 curl 200（含 /config、/balance、/usage/summary、/wait-state、POST /ingest/turn 带 settled、POST /ingest/wait-event）；浏览器视觉走查本子代理无浏览器工具，留人工一次（`node tools/dev-preview.mjs` → pane 挂载于 pane-slot、余额 12.35 CNY、今日 4.56 CNY、window.__preview.errors 空）。
+
+### 与 WP-2 契约的消费方式（跨包）
+
+- `POST /ingest/turn` 响应 `settled: [{dedup_key, estimated_cost_units, currency, cost_basis}]`：**只在响应携带 settled 数组时处理**（`Array.isArray` 门），字段逐个防御（非有限数→null→「—」；'none' 币种→null；dedup_key 非字符串→null）；端点未就绪/字段缺失时行为与集成前完全一致。
+- `POST /ingest/wait-event` body `{kind:'question', phase:'open'|'close', tool_id, session_id}`：失败静默。
+- `GET /wait-state` → `{slots:[...]}`：非数组/失败→视为无等待。
+
+### 偏差与备注
+
+1. `desktop/src/core/ingest-client.js` 属「唯一允许改的 src 文件是 main.js」约束之外的改动——但任务交付 1 第 4 条明确要求给 createIngestClient 加 onSettled（最小改动：工厂参数 + 响应处理分支），已按任务书执行；该文件不在 WP-2/WP-3 所有权清单内，无冲突。
+2. SUBSCRIBED_EVENTS 实际此前**未含** tool.start/tool.complete（任务书背景表述与 main.js 现状不符）——已按交付 5 的要求补上，register.test 的事件面断言随导出常量自动一致。
+3. pane render 用 `jsx(WhalePane, {...})` 组件元素而非直接函数调用 `WhalePane({...})`：WhalePane/DataCard 内部使用 useValue hook，直接调用会在真实 React 渲染路径外破坏 hooks 语义；register.test 的「render 返回元素→type(props) 执行」模式不受影响。
+4. **产品级观察（WP-owned 文件，未动）**：controller.click() 的 combo≥4 走 `queue.show('idle-line')`，但 idle-line 与仍存活的 greeting 同为 info rank（queue 同 rank 先插入者可见，且 tap advance 会重置 greeting 的 ttl）→ idle-line 实际被 greeting 遮住不可见。controller.test 按现状钉住并注释；建议后续在 controller/queue 层让 idle-line 顶替同 rank 或缩短 greeting。
+5. turn_cost 的 config 键（reminders.turn_cost_enabled / bubbles.turn_cost_ttl_ms）暂未从 /config 喂给 controller（controller 工厂参数在创建时固化，而 config 是异步取回；任务书仅要求 dataService.start(config)）——当前用与 config 默认一致的内置默认，如需热更新需 controller 支持重配置（后续里程碑）。
+6. wait-state 失败时按任务书「视为无等待」处理并调用 syncWaiting(false,false)（dismiss 等待泡泡）——若真实等待期间出现瞬时网络抖动，10s 内的下一次成功轮询会恢复；极端抖动下可能有短暂等待泡泡闪烁，属任务书语义的直接推论。
+7. `tools/preview/preview-host.js` 在「dev-preview.mjs 如需最小改动」授权的延伸范围内（pane 贡献需要挂载点才能可视化验收），改动仅 +6 行。
+8. 未 commit（按任务约束）；工作区中 dashboard/*、whale_agent/*、plugin.yaml、sound/* 等改动属 WP-2/WP-3 并行工程师。
+
+### 下一阶段
+
+真机冒烟（M5 计划项：ctx.rest POST 形状、tool.start/complete 与 message.complete 真实 payload 形状核对）；WP-2 test_acc01 断言更新后回归 pytest；M8-B/C 级 approval 提醒桥接；M10 素材替换占位 SVG。
+
+## 2026-10-03 — M8 提醒（WP-2 Python 半体）：提醒规则引擎 + 等待桥 + 审批观察 hook
+
+### Hook 探查结论（只读 D:\hermes，供本次实现钉死）
+
+1. **hook 名称与语义**：`hermes_cli/plugins.py:144-148` — `VALID_HOOKS` 含 `pre_approval_request` / `post_approval_response`，为 **observer-only**（返回值被忽略，插件不能否决/预答审批）；kwargs = `command, description, pattern_key, pattern_keys, session_key, surface("cli"|"gateway"|"smart")`，post 追加 `choice`（once/session/always/deny/timeout/smart_approve/smart_deny/cancelled）与 `decided_by`。
+2. **注册 API 与真实范例**：`hermes_cli/plugins.py:974-976` — `ctx.register_hook(hook_name: str, callback: Callable) -> PluginRegistration`；真实插件范式见 `D:\hermes\plugins\hermes-lcm\__init__.py:448-453`（`getattr(ctx, "register_hook", None)` 防御式注册 + 每项 try/except）。fire 点：`tools/approval_gateway_wait.py:147-152,198`（gateway 面）与 `tools/approval.py:912-917`（CLI 面）；`tools/approval_context.py:54-73` 会追加注入 `turn_id`/`tool_call_id`/`session_id` 并保证 dispatch 永不 raise（回调异常被 invoke_hook 吞掉）。
+3. **运行位置**：审批 hook 在 serve 进程（与 dashboard 半体同进程不同线程，AUDIT §6.1）→ approval-state.json 的原子写 + 只读端天然安全，无需跨进程锁。
+
+### 交付（全部在任务书文件所有权内）
+
+- **`whale_core/notifications.py`**（实现替换占位）：`fire()`（INSERT OR IGNORE on dedup_key UNIQUE → `fired`/`duplicate`，DR-14 持久去重）、`pending()`（未过期未消除按 rank 排序：预算 1 > 预警 2 > 消耗 3 > 等待 4）、`active_dedup_keys()`、`dismiss()`、`dismiss_active()`（按 kind+前缀自动消除）、`count_all()`。payload 金额字段全部遵守 DATA_MODEL §8.1（estimated_*/observed_* + *_units + currency，无裸 cost/spend/used）。
+- **`whale_core/rules.py`**（实现替换占位）：`evaluate_balance_low()`（`observed_balance_units < thresholds.balance_low` 触发，dedup `balance_low:{scope}:{day}`；回升 ≥ 阈值自动消除未过期通知；配置 None/非法 → 规则关闭；跨日重置）、`evaluate_daily_budget()`（逐 `daily_summary` usage 轨 scope 行比较 `estimated_cost_units ≥ thresholds.daily_budget`，dedup `budget:{scope}:{day}`，**币种永不合并**（DR-12）、NULL 桶跳过）、`evaluate_turn_cost()`（`reminders.turn_cost_enabled` 且已计价轮 ≥ `thresholds.turn_cost_min`（新 config 键，默认 None）→ dedup `turn:{turn_dedup_key}`，ttl 取 `bubbles.turn_cost_ttl_ms`；未计价轮诚实跳过）。阈值经 `pricing.to_units` 转定点，解析失败降级为「规则关」并告警。
+- **触发 hook（最小插入，全部 try/except + log.warning 包裹，不改返回值/事务语义）**：`ingest.py` 结算成功路径末尾（`evaluate_turn_cost` + `evaluate_daily_budget`）、`balance_ledger.record_snapshot()` 末尾 commit 后（`evaluate_balance_low`）。
+- **`whale_core/wait_bridge.py`**（实现替换占位）：question 槽位读写（whale_meta 键 `wait.question.<tool_id>` JSON `{session_id, since}`）、`approval_slots()` 读 `approval-state.json`（损坏/缺失 → []，fail-open）、`wait_state()` 合并输出并在读路径同步 wait 类通知（新挂起 → fire `wait:question:<tool_id>` / `wait:approval:<id>` ttl=0 常驻；解除 → 自动 dismiss「等待解除收泡」），fired_dedup_keys = 当前活跃通知键（前端重载对齐不补响）。
+- **`whale_core/wait_api.py`**（新增，独立 APIRouter；`api.py` 一行 `router.include_router(wait_api.router)`）：`POST /ingest/wait-event`（回环守卫 + 严格白名单：kind/phase 枚举、tool_id/session_id 类型长度、**未知字段拒绝**——回答内容/密钥形态无法进账，畸形 → 400 且不回显值）、`GET /wait-state`（契约形状 `{question_slots:[{tool_id,session_id,since}], approval_slots:[...], fired_dedup_keys:[]}`）。
+- **跨包 REST 契约（交付 2）**：`ingest.py` 响应新增 `settled` 数组——仅成功结算的 turn，字段精确为 `{dedup_key, estimated_cost_units(int|null), currency(str|null), cost_basis}`；duplicate/aligned/skipped 响应保持旧形状；batch 聚合 accepted 项。旧字段（status/accepted/duplicate/aligned/skipped）全部保留。
+- **`whale_agent/approval_hook.py`**（实现替换占位，stdlib-only + 防御式复用 `whale_core.config.data_dir()`）：`_on_pre_approval_request` → 原子写 `approval-state.json`（`{approvals:[{id,kind,tool,since}]}`，**只含 id/kind/tool/since**，绝不写 command/description/pattern/secret；tmp + os.replace + 模块锁；≤32 条上限）；`_on_post_approval_response` → 精确 id 移除 + 会话前缀兜底（关联 id 缺失时按 session 清槽；审批阻塞会话，无名列串行）。仅 `surface == 'gateway'` 观测；回调与注册全部吞异常仅记日志。id = `<session>#<tool_call_id|turn_id|pending>`。
+- **`__init__.py`（agent 半体入口）**：register(ctx) 按真实插件范式（hermes-lcm）接线 `register_approval_hooks(ctx)`，整体 try/except（注册失败仅记日志，插件照常加载）；**`plugin.yaml`** 增加 `provides_hooks: [pre_approval_request, post_approval_response]`（与实际注册一致，admission 规则 6）。
+- **config.py**：DEFAULTS["thresholds"] 增加 `turn_cost_min: None`（最小改动）。
+
+### 测试（全部真实输出；`--basetemp=.pytest-tmp-c`）
+
+- `pytest plugin-src/hermes-whale-widget/dashboard/tests -q --basetemp=.pytest-tmp-c` → **180 passed, 0 failed**（本 WP 新增 44 条：test_reminders.py 25 + test_wait_state.py 19；既有 136 条回归全绿）。
+  - REM 域覆盖：余额阈值触发/重复抑制/回升自动消除/同日静默/跨日再响；预算逐 scope 触发（币种不合并）/重复/跨日重置/开关；turn 通知开关/下限/未计价/turn-dedup 继承；重启模拟（reset_runtime 后重放 → duplicate 不重响，DR-14）；wait-event 挂起/解除/重放幂等/畸形 400×11/凭据形态 400/回环 403；wait-state 形状/多会话槽位/重复轮询不重复通知/审批槽位合并/损坏文件兜底；approval-state.json 原子写（无 tmp 残留）/隐私断言（文件中无 command/description/pattern 字样）/损坏兜底/前后向配对（精确 id + 会话前缀兜底）/多会话互不干扰/回调吞异常/注册缺失与注册失败静默/plugin.yaml provides_hooks 声明；hook 崩溃不破坏结算与记账（monkeypatch 抛 RuntimeError → 200 + 行照写）；REST 命名 lint（ingest 响应/wait-state/通知 payload 全查 `find_bare_money_keys` == []）。
+- `node tools/check-security.mjs` → OK；`.venv/Scripts/python.exe tools/check-security.py` → OK（99 文件）。
+
+### 跨包契约确认（WP-1 消费面）
+
+1. `POST /ingest/turn` 成功响应 = 旧字段 + `settled: [{dedup_key, estimated_cost_units(int|null), currency(str|null), cost_basis}]`；duplicate/aligned/skipped 响应**不含** settled 键（旧形状逐键不变）。
+2. `POST /ingest/wait-event` body 白名单 = 恰好 `{kind:'question', phase:'open'|'close', tool_id, session_id}`；未知字段/枚举外值/类型错 → 400（信息只含字段名）；open/close 均幂等可重放。
+3. `GET /wait-state` = `{question_slots:[{tool_id,session_id,since}], approval_slots:[{id,kind,tool,since}], fired_dedup_keys:[...]}`；fired_dedup_keys 含当前活跃通知 dedup（含 wait/turn/budget/balance_low 类）。
+4. `approval-state.json` 位于插件数据目录（`<HERMES_HOME>/whale-widget/`），条目仅 `{id,kind,tool,since}`；缺失/损坏对 /wait-state 无害（空列表）。
+5. desktop 若需在重载后对齐「已响」标记：以 /wait-state 的 fired_dedup_keys 为准（通知表持久化，DR-14）。
+
+### 偏差与说明（实现 vs 任务书/既有测试）
+
+1. **既有测试 2 处断言机械更新**（test_ingest_contract.py::test_batch_shape_counts、test_ledger_accounting.py::test_acc01_*）：二者以 `==` 钉死旧的 accepted 响应形状，与交付 2「响应新增 settled」直接冲突且不可兼容（pytest 全绿是硬约束）。仅把整字典相等断言改为「旧字段断言 + settled 数组存在性」，未改动任何测试语义/场景；其余既有测试文件未动。
+2. **balance_low 去重键采用任务书口径** `balance_low:{scope}:{day}`（DATA_MODEL §2.10 的 `low:<scope>:<threshold>` 与计划的「恢复后删键可再响」迟滞语义被任务书取代）：回升≥阈值只自动消除未过期通知（显示层迟滞），同日再跌破不重响（DR-14 优先），次日键重置后再响。已用测试钉死。
+3. **wait-event 在 open/close 时同步维护 wait_input 通知**（fire/dismiss，dedup `wait:question:<tool_id>`）：任务书只要求槽位增删，但 IMPLEMENTATION_PLAN M8 任务 2 明确「交 Python 统一写 notification（wait:question:<tool_id>）」，且 fired_dedup_keys 需要它才有对齐语义——按计划补齐，测试钉死不重复响。
+4. **GET /wait-state 读路径同步 wait_approval 通知**（新 id → fire、消失 id → dismiss）：IMPLEMENTATION_PLAN M8 任务 3 要求「新挂起 id → notification 行」；INSERT OR IGNORE 保证 1s 轮询零重复。任务书未列，按计划补齐。
+5. **审批条目字段收窄**：IMPLEMENTATION_PLAN M8 写「id/command/description/session_key/ts」，任务书明确收窄为「只含 id/kind/tool/at」——按任务书执行（更严格的隐私边界），`since` 即时间戳；session_key 编码进 id 前缀以支撑配对与兜底清槽，不单独落字段。
+6. **今日预算的口径**：按任务书「usage 轨当日 estimated_cost_units 合计」实现为**逐 daily_summary scope 行**（scope=usage:<profile>:<currency>，行内即当日合计）比较，跨币种不求和（DR-12「币种不一致不比较」）；预算配置无币种字段（budget 表/UI 属 M12），数值直比。
+7. **未计价轮（token_only）不发 turn_cost 通知**：estimated_cost_units 为 NULL 无从与下限比较、也无金额可展示；泡泡链路若需「本轮 —」可后续在消费端处理。
+8. 未 commit（按任务约束）；未触碰 desktop/src、desktop/tests、desktop/plugin.js、sound/（WP-1/WP-3 所有权）；tools/preview、main.js、ingest-client.js 等工作区改动属并行工程师。
+
+### 未解决问题 / 下一阶段
+
+- 真机冒烟（用户配合）：clarify tool.start/complete → /ingest/wait-event 端到端；approval hook 在 gateway 面触发一次审批 → 等待泡出现 → 批准收泡；`session_id` 与 gateway `session_key` 的对应关系核对（审批 hook 只拿 session_key）。
+- 通知 WS 推送未接（MVP 用 3s/1s 轮询 fallback，OAuth remote 本就必需）；/notifications REST 端点留待 M7/M8 桌面接线需要时再加（查询函数已备）。
+- 预算/阈值设置 UI、budget 表实体 CRUD 属 M12；当前 thresholds 走 config.json。
+
+## 2026-10-04 — MVP 收口（M0-M8 全绿；三工作包并行 + 主会话集成）
+
+- 并行工作包（用户恢复子代理配额后三路并行，文件所有权严格隔离）：
+  - WP-1（desktop 集成）：main.js 完成 floating pane 注册（PANES_AREA + placement floating）、controller/dataService 接线、clarify→/ingest/wait-event 转发、wait-state 10s 轮询、ingest 响应 settled→每轮消费泡泡（防御式消费）；新增 10 个测试文件 109 条。
+  - WP-2（M8 Python）：notifications/rules（余额预警/每日预算/每轮消费，DR-14 持久去重）、wait_bridge+wait_api（/ingest/wait-event、/wait-state）、whale_agent approval hook（hermes_cli/plugins.py:144-148 observer-only 签名核实）、ingest 响应 settled 契约；新增 44 条测试。
+  - WP-3（M9 核心）：Web Audio 引擎（DSH 语义全量：同步起播/−40ms 衔接排期/音量三态/mute/60s suspend/缓存），27 条测试，未接线（后续集成）。
+- 合并回归（主会话）：npm test **185 passed**、pytest **180 passed**、构建+node --check+双重安全自检全部 OK。
+- README 已实现/未实现/已知限制与命令节已回填。
+- 遗留：音效接线、combo≥4 idle-line 同 rank 遮挡（WP-1 观察）、M10-M13。

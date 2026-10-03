@@ -56,13 +56,25 @@ tools/           可复用开发脚本
 
 ## 5. 命令
 
-（Milestone 0 建立 dev/test 脚手架后回填；在此之前以 `node --check` / 手动 bundle 验证为准。）
+（在项目根目录 `E:\hermes_plugin\hermes-whale-widget` 执行；Python 一律用项目内 `.venv`。）
 
 ```text
-# build:    待定（plugin.js 为打包产物）
-# test:     待定
-# lint:     待定
+# build (desktop 半体单文件 ESM 产物):
+node tools/build-desktop.mjs
+# test (JS 半体):
+npm test
+# test (Python 半体):
+.venv/Scripts/python.exe -m pytest plugin-src/hermes-whale-widget/dashboard/tests -q --basetemp=.pytest-tmp
+# security/lint (双重，都必须通过):
+node tools/check-security.mjs
+.venv/Scripts/python.exe tools/check-security.py
+# 预览页（SDK shim，不触碰 Hermes）:
+node tools/dev-preview.mjs
+# 产物语法检查:
+node --check plugin-src/hermes-whale-widget/desktop/plugin.js
 ```
+
+注意：pytest 必须带 `--basetemp=.pytest-tmp`（本机默认 temp 目录有权限问题）；provider 网络调用必须注入 transport（httpx.MockTransport），禁止真实付费 API。
 
 ## 6. Windows 特殊注意事项
 

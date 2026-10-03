@@ -30,14 +30,16 @@ values (new baseline 0 — never a negative delta), ``reset_count += 1``, and
 the watermark aligns to the new snapshot. Known blind spot R1, honestly
 marked rather than silently mis-recorded.
 
-Cost fields (M2 boundary): M3 owns pricing. Every row is ``token_only`` with
-``estimated_cost_units = 0`` (the DDL column is NOT NULL — 0 + basis is the
-documented "no price computed yet" representation); ``cost_usd`` seen in the
-snapshot is preserved verbatim inside ``cumulative_json`` so M3 can backfill.
-``daily_summary.estimated_cost_units`` stays NULL (nullable column → honest
-NULL, "null ≠ 0").
+Cost fields (M3): :mod:`whale_core.pricing` decides the cost basis at
+settlement time — ``hermes_estimate`` (cumulative ``cost_usd`` delta vs the
+session watermark) > ``whale_pricing`` (tokens × custom/builtin price) >
+``token_only`` (unknown model / counter reset → ``pricing_status=
+'unknown_model'`` with ``estimated_cost_units NULL`` — never billed as 0;
+schema v2 relaxed the v1 NOT NULL placeholder). Currency is per-bucket:
+``daily_summary`` rows are scoped ``usage:<profile>:<currency>`` (multi-
+currency never merges, DR-12; unpriced turns land in the ``none`` bucket).
 
-Money is 1e8 fixed-point; this module writes none yet (M3).
+Money is 1e8 fixed-point (whale_core.pricing.SCALE).
 
 All timestamps: ``received_at`` comes from the payload (JS wall clock);
 ``day`` is the LOCAL-timezone date of ``received_at`` (DR-12);
@@ -52,6 +54,7 @@ import json
 import time
 from typing import Any
 
+from . import pricing
 from .clock import now_ms
 from .logging_setup import get_logger
 from .security import assert_no_secrets_in_payload
@@ -60,10 +63,9 @@ log = get_logger("ingest")
 
 SOURCE_EVENT = "message.complete"  # the only settlement entry point (DR-13)
 MODEL_UNKNOWN = "unknown"
-# M2 placeholder: no pricing yet (M3 owns cost/currency semantics).
+# Unpriced turns carry no currency — the daily rollup buckets them under this
+# documented placeholder scope ('none'); the query layer maps it back to null.
 CURRENCY_PLACEHOLDER = "none"
-COST_BASIS_M2 = "token_only"
-ESTIMATED_UNITS_M2 = 0
 
 #: reconnect-replay fuzz window for the content lookup (see module docstring).
 REPLAY_WINDOW_MS = 10 * 60_000
@@ -250,7 +252,7 @@ def _get_watermark(conn, session_id: str) -> dict[str, Any]:
     if row is None:
         return {
             "input": 0, "output": 0, "cache_read": 0, "cache_write": 0, "reasoning": 0,
-            "last_calls": None, "reset_count": 0,
+            "last_calls": None, "last_cost_units": None, "reset_count": 0,
         }
     return {
         "input": row["last_input"],
@@ -259,6 +261,7 @@ def _get_watermark(conn, session_id: str) -> dict[str, Any]:
         "cache_write": row["last_cache_write"],
         "reasoning": row["last_reasoning"],
         "last_calls": row["last_calls"],
+        "last_cost_units": row["last_cost_units"],
         "reset_count": row["reset_count"],
     }
 
@@ -310,7 +313,8 @@ def _upsert_watermark(
 
     Normal path: monotonic max per field (out-of-order replays can never drag
     it back). Reset path: align DOWN to the snapshot and count the reset
-    (DATA_MODEL §3.3).
+    (DATA_MODEL §3.3). ``last_cost_units`` tracks the cumulative-cost snapshot
+    (M3 hermes_estimate delta base) with the same max/align discipline.
     """
     current = _get_watermark(conn, session_id)
     values: dict[str, int | None] = {}
@@ -332,24 +336,35 @@ def _upsert_watermark(
     else:
         values["last_calls"] = max(current["last_calls"], int(calls))
 
+    cost_usd = usage.get("cost_usd")
+    if cost_usd is None:
+        values["last_cost_units"] = current["last_cost_units"]
+    else:
+        snapshot_cost = pricing.to_units(cost_usd)
+        if reset or current["last_cost_units"] is None:
+            values["last_cost_units"] = snapshot_cost
+        else:
+            values["last_cost_units"] = max(current["last_cost_units"], snapshot_cost)
+
     reset_count = current["reset_count"] + (1 if reset else 0)
     conn.execute(
         """
         INSERT INTO session_watermark(
             session_id, last_input, last_output, last_cache_read, last_cache_write,
-            last_reasoning, last_calls, last_seen_at, reset_count)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            last_reasoning, last_calls, last_seen_at, reset_count, last_cost_units)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(session_id) DO UPDATE SET
             last_input=excluded.last_input, last_output=excluded.last_output,
             last_cache_read=excluded.last_cache_read, last_cache_write=excluded.last_cache_write,
             last_reasoning=excluded.last_reasoning, last_calls=excluded.last_calls,
-            last_seen_at=excluded.last_seen_at, reset_count=excluded.reset_count
+            last_seen_at=excluded.last_seen_at, reset_count=excluded.reset_count,
+            last_cost_units=excluded.last_cost_units
         """,
         (
             session_id,
             values["last_input"], values["last_output"], values["last_cache_read"],
             values["last_cache_write"], values["last_reasoning"], values["last_calls"],
-            int(received_at), reset_count,
+            int(received_at), reset_count, values["last_cost_units"],
         ),
     )
 
@@ -436,21 +451,33 @@ def _upsert_daily_summary(
     day: str,
     model: str,
     deltas: dict[str, Any],
+    currency: str | None,
+    cost_units_delta: int | None,
     now: int,
 ) -> None:
-    """Track① daily rollup (scope per DATA_MODEL §3.5; currency placeholder
-    'none' until M3 pricing lands). Merges per-model token counters."""
-    scope = f"usage:{profile or 'default'}:{CURRENCY_PLACEHOLDER}"
+    """Track① daily rollup (DATA_MODEL §2.7, §3.5).
+
+    Scope = ``usage:<profile>:<currency>`` — each currency is its own ledger
+    row (multi-currency never merges, DR-12); unpriced turns (currency NULL)
+    land in the documented ``none`` bucket whose cost stays NULL. Token
+    counters merge per bucket; ``estimated_cost_units`` accumulates the
+    bucket's priced turns only.
+    """
+    bucket_currency = currency or CURRENCY_PLACEHOLDER
+    scope = f"usage:{profile or 'default'}:{bucket_currency}"
     fields = tuple(TOKEN_FIELDS) + ("calls",)
 
     def _zero() -> dict[str, int]:
         return {f: 0 for f in fields}
 
     row = conn.execute(
-        "SELECT tokens_json FROM daily_summary WHERE scope = ? AND day = ? AND track = 'usage'",
+        "SELECT estimated_cost_units, tokens_json FROM daily_summary WHERE scope = ? AND day = ? AND track = 'usage'",
         (scope, day),
     ).fetchone()
-    if row and row["tokens_json"]:
+    existing_cost: int | None = None
+    if row is not None:
+        existing_cost = row["estimated_cost_units"]
+    if row is not None and row["tokens_json"]:
         try:
             data = json.loads(row["tokens_json"])
         except ValueError:
@@ -472,15 +499,22 @@ def _upsert_daily_summary(
         mrow[f] = int(mrow.get(f) or 0) + int(delta)
     data["models"][model] = mrow
 
+    merged_cost = existing_cost
+    if cost_units_delta is not None:
+        merged_cost = int(cost_units_delta) + int(existing_cost or 0)
+        pricing.check_units_bound(merged_cost)
+
     conn.execute(
         """
         INSERT INTO daily_summary(scope, day, track, currency, estimated_cost_units,
                                   tokens_json, partial, needs_review, updated_at)
-        VALUES (?, ?, 'usage', ?, NULL, ?, 0, 0, ?)
+        VALUES (?, ?, 'usage', ?, ?, ?, 0, 0, ?)
         ON CONFLICT(scope, day, track) DO UPDATE SET
+            estimated_cost_units=excluded.estimated_cost_units,
             tokens_json=excluded.tokens_json, updated_at=excluded.updated_at
         """,
-        (scope, day, CURRENCY_PLACEHOLDER, json.dumps(data, ensure_ascii=False, sort_keys=True), int(now)),
+        (scope, day, bucket_currency, merged_cost,
+         json.dumps(data, ensure_ascii=False, sort_keys=True), int(now)),
     )
 
 
@@ -512,12 +546,19 @@ def ingest_turn(conn, payload: Any, *, now: int | None = None) -> dict[str, Any]
             _touch_watermark(conn, session_id, received_at)
         return {"status": "accepted", "accepted": 0, "duplicate": 0, "aligned": False, "skipped": True}
 
-    cost_basis = COST_BASIS_M2
-    units = ESTIMATED_UNITS_M2
-
     # deltas are computed from the pre-settle watermark (pure function)
     wm = _get_watermark(conn, session_id)
     deltas, reset = _compute_delta(usage, wm)
+
+    # M3 settlement: hermes_estimate > whale_pricing > token_only (unknown
+    # model / reset turns → NULL cost, never a fabricated 0).
+    settlement = pricing.compute_settlement(
+        conn, p["model"], deltas, usage,
+        reset=reset, watermark_cost_units=wm["last_cost_units"],
+    )
+    cost_basis = settlement["cost_basis"]
+    units = settlement["estimated_cost_units"]
+    currency = settlement["currency"]
 
     cumulative_json = json.dumps({k: usage.get(k) for k in USAGE_WHITELIST}, ensure_ascii=False, sort_keys=True)
     raw_payload_json = json.dumps(p["usage_raw"], ensure_ascii=False, sort_keys=True, default=str)
@@ -532,11 +573,15 @@ def ingest_turn(conn, payload: Any, *, now: int | None = None) -> dict[str, Any]
             _upsert_watermark(conn, session_id, usage, received_at, reset=reset)
         return {"status": "duplicate", "accepted": 0, "duplicate": 1, "aligned": False}
 
+    snapshot_json = (
+        json.dumps(settlement["pricing_snapshot"], ensure_ascii=False, sort_keys=True)
+        if settlement["pricing_snapshot"] is not None else None
+    )
     with conn:  # single transaction per turn: rows are written together or not at all
         turn_seq = _next_turn_seq(conn, session_id)
         dedup_key = compute_dedup_key(
             session_id, day, minute, turn_seq, SOURCE_EVENT, p["model"],
-            deltas, cost_basis, units,
+            deltas, cost_basis, units if units is not None else 0,
         )
         status = "provisional" if (reset or p["status"] != "complete") else "final"
         cur = conn.execute(
@@ -563,16 +608,17 @@ def ingest_turn(conn, payload: Any, *, now: int | None = None) -> dict[str, Any]
             """
             INSERT OR IGNORE INTO turn_cost(
                 dedup_key, session_id, turn_seq, model, estimated_cost_units,
-                currency, cost_basis, pricing_snapshot_json, status, day, settled_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
+                currency, cost_basis, pricing_status, pricing_snapshot_json, status, day, settled_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                dedup_key, session_id, turn_seq, p["model"], int(units),
-                CURRENCY_PLACEHOLDER, cost_basis, status, day, int(ts),
+                dedup_key, session_id, turn_seq, p["model"], units,
+                currency, cost_basis, settlement["pricing_status"], snapshot_json,
+                status, day, int(ts),
             ),
         )
         _upsert_watermark(conn, session_id, usage, received_at, reset=reset)
-        _upsert_daily_summary(conn, p["profile"], day, p["model"], deltas, ts)
+        _upsert_daily_summary(conn, p["profile"], day, p["model"], deltas, currency, units, ts)
 
     if not inserted:
         # lost a race against a concurrent identical write — report honestly

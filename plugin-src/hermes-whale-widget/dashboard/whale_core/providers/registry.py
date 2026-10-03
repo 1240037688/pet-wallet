@@ -1,8 +1,24 @@
-"""Vendor template registry (pure data + probe/fetch executors).
+"""Vendor template registry (M4: DeepSeek only; M11 generalises).
 
-STUB (M0 — implemented in M11). Template shape per [DSH] F1; only
-field-verified templates are admitted (each carries a "verified <date>" or
-"unverified" note).
+M4 keeps this intentionally minimal — one active provider, resolved by id.
+M11 will move template instantiation here ([DSH] F1 shape: name / currency /
+keyRef / balance url+auth+json path+scale / probeUrl / matchIds / noBalanceApi)
+with the "field-verified only" admission rule.
 """
 
-from __future__ import annotations  # noqa: F401  (stub module — implemented in M11)
+from __future__ import annotations
+
+from typing import Any
+
+from .deepseek import DeepSeekProvider
+
+_PROVIDERS: dict[str, type] = {DeepSeekProvider.id: DeepSeekProvider}
+
+
+def get_provider(provider_id: str) -> Any:
+    """Return the provider instance or raise KeyError (unknown id)."""
+    return _PROVIDERS[provider_id]()
+
+
+def known_ids() -> list[str]:
+    return sorted(_PROVIDERS)

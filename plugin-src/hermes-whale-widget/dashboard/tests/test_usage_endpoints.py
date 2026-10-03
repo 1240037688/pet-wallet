@@ -61,9 +61,10 @@ def test_summary_after_two_turns_two_models(client):
     _seed(client)
     body = client.get(f"{MOUNT_PREFIX}/usage/summary").json()
     assert body["turns_today"] == 2
-    # M2 boundary: token_only turns contribute NO money figure (stays NULL)
-    assert body["estimated_today_units"] is None
-    assert body["estimated_today_basis"] == "token_only"
+    # M3 pricing: both turns priced from the builtin CNY table
+    # (chat 100×2+50×8=60_000; reasoner deltas 30×6+70×24=186_000)
+    assert body["estimated_today_units"] == 246_000
+    assert body["estimated_today_basis"] == "whale_pricing"
     assert body["tokens_today"]["input"] == 130
     assert body["tokens_today"]["output"] == 120
     assert body["tokens_today"]["calls"] == 3  # turn2 calls == turn1 calls → zero delta
@@ -81,7 +82,7 @@ def test_summary_days7_includes_today_and_partial_flags(client):
     assert len(body["estimated_days"]) == 7
     today = body["estimated_days"][-1]
     assert today["tokens"]["input"] == 130
-    assert today["estimated_cost_units"] is None  # null ≠ 0 in day rollups too
+    assert today["estimated_cost_units"] == 246_000  # priced turns roll up
     assert body["partial_flags"]["provisional_turns"] == 0
 
 
@@ -98,9 +99,9 @@ def test_turns_listing_order_shape_and_null_cost(client):
     assert seqs == [2, 1]  # most recent first
     first = body["turns"][0]
     assert first["model"] == "deepseek-reasoner"
-    assert first["cost_basis"] == "token_only"
-    assert first["estimated_cost_units"] == 0  # ledger column (token_only representation)
-    assert first["currency"] is None  # 'none' placeholder never leaks as a currency
+    assert first["cost_basis"] == "whale_pricing"
+    assert first["estimated_cost_units"] == 186_000  # 30×6 + 70×24 CNY-e8
+    assert first["currency"] == "CNY"
     assert first["tokens"]["input"] == 30
     assert find_bare_money_keys(body) == []
 

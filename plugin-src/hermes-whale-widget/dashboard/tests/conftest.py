@@ -32,6 +32,8 @@ def hermes_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     home = tmp_path / "hermes-home"
     home.mkdir()
     monkeypatch.setenv("HERMES_HOME", str(home))
+    # poller threads are a production concern; tests drive refresh synchronously
+    monkeypatch.setenv("WHALE_WIDGET_DISABLE_POLLER", "1")
     return home
 
 

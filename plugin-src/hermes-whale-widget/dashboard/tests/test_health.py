@@ -6,6 +6,7 @@ import pytest
 from fastapi import HTTPException
 
 from conftest import MOUNT_PREFIX, make_request
+from whale_core.migrations import SCHEMA_VERSION
 from whale_core.security import find_bare_money_keys, verify_loopback
 
 
@@ -15,7 +16,7 @@ def test_health_returns_schema_version(client):
     body = res.json()
     assert body["ok"] is True
     assert body["plugin"] == "whale-widget"
-    assert body["schema_version"] == 1
+    assert body["schema_version"] == SCHEMA_VERSION
     assert body["track3_state"] == "not_implemented"  # M2 replaces this
     assert body["contract_probe"] is None
     assert "version" in body
@@ -35,7 +36,7 @@ def test_meta_reports_plugin_metadata(client):
     assert body["label"] == "Whale Widget"
     assert body["api"] == "plugin_api.py"
     assert body["mounted_at"] == MOUNT_PREFIX
-    assert body["schema_version"] == 1
+    assert body["schema_version"] == SCHEMA_VERSION
 
 
 def test_no_bare_money_keys_in_any_get_response(client):

@@ -18,7 +18,7 @@ import shutil
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _V1_DDL = """
 -- ── supporting structures ──────────────────────────────────────────────
@@ -273,8 +273,81 @@ CREATE TABLE summary_archive (
 );
 """
 
+# ── v2 (M3 pricing): unpriced cost rows must be NULL, never 0 ────────────
+# The v1 NOT NULL on turn_cost.estimated_cost_units forced the M2 placeholder
+# "0 + token_only" representation for "no price computed yet" — with M3 that
+# would leak fake zeros into sums. v2 relaxes both money columns, adds the
+# pricing_status reason column (unknown_model), migrates the M2 placeholder
+# rows to honest NULLs, and adds the balance-track revision column (M4
+# optimistic-concurrency, DATA_MODEL §2.6) plus the session cost watermark
+# column used for cumulative-cost deltas.
+_V2_DDL = """
+CREATE TABLE turn_cost_v2 (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  dedup_key TEXT NOT NULL UNIQUE,
+  session_id TEXT NOT NULL,
+  turn_seq INTEGER NOT NULL,
+  model TEXT NOT NULL,
+  provider_id TEXT REFERENCES provider(id) ON DELETE SET NULL,
+  estimated_cost_units INTEGER,             -- v2: NULL = unpriced (unknown_model); never a fake 0
+  currency TEXT,                            -- v2: NULL for unpriced rows
+  cost_basis TEXT NOT NULL CHECK(cost_basis IN('hermes_estimate','whale_pricing','token_only')),
+  pricing_status TEXT CHECK(pricing_status IN('hermes_estimate','whale_pricing','unknown_model')),
+  pricing_snapshot_json TEXT,
+  status TEXT NOT NULL DEFAULT 'final' CHECK(status IN('final','provisional')),
+  day TEXT NOT NULL,
+  settled_at INTEGER NOT NULL
+);
+INSERT INTO turn_cost_v2(
+    id, dedup_key, session_id, turn_seq, model, provider_id,
+    estimated_cost_units, currency, cost_basis, pricing_status,
+    pricing_snapshot_json, status, day, settled_at)
+SELECT id, dedup_key, session_id, turn_seq, model, provider_id,
+    CASE WHEN cost_basis = 'token_only' THEN NULL ELSE estimated_cost_units END,
+    CASE WHEN cost_basis = 'token_only' THEN NULL ELSE currency END,
+    cost_basis,
+    CASE WHEN cost_basis = 'token_only' THEN 'unknown_model' ELSE cost_basis END,
+    pricing_snapshot_json, status, day, settled_at
+FROM turn_cost;
+DROP TABLE turn_cost;
+ALTER TABLE turn_cost_v2 RENAME TO turn_cost;
+CREATE INDEX idx_turn_cost_day ON turn_cost(day, currency);
+
+CREATE TABLE turn_cost_archive_v2 (
+  id INTEGER PRIMARY KEY,
+  dedup_key TEXT NOT NULL UNIQUE,
+  session_id TEXT NOT NULL, turn_seq INTEGER NOT NULL,
+  model TEXT NOT NULL,
+  provider_id TEXT,
+  estimated_cost_units INTEGER,
+  currency TEXT,
+  cost_basis TEXT NOT NULL,
+  pricing_status TEXT,
+  pricing_snapshot_json TEXT,
+  status TEXT NOT NULL DEFAULT 'final',
+  day TEXT NOT NULL, settled_at INTEGER NOT NULL,
+  archived_at INTEGER NOT NULL
+);
+INSERT INTO turn_cost_archive_v2(
+    id, dedup_key, session_id, turn_seq, model, provider_id,
+    estimated_cost_units, currency, cost_basis, pricing_status,
+    pricing_snapshot_json, status, day, settled_at, archived_at)
+SELECT id, dedup_key, session_id, turn_seq, model, provider_id,
+    CASE WHEN cost_basis = 'token_only' THEN NULL ELSE estimated_cost_units END,
+    CASE WHEN cost_basis = 'token_only' THEN NULL ELSE currency END,
+    cost_basis,
+    CASE WHEN cost_basis = 'token_only' THEN 'unknown_model' ELSE cost_basis END,
+    pricing_snapshot_json, status, day, settled_at, archived_at
+FROM turn_cost_archive;
+DROP TABLE turn_cost_archive;
+ALTER TABLE turn_cost_archive_v2 RENAME TO turn_cost_archive;
+
+ALTER TABLE daily_summary ADD COLUMN revision TEXT;
+ALTER TABLE session_watermark ADD COLUMN last_cost_units REAL;
+"""
+
 # (version, sql). Append-only; never edit an applied migration.
-MIGRATIONS: list[tuple[int, str]] = [(1, _V1_DDL)]
+MIGRATIONS: list[tuple[int, str]] = [(1, _V1_DDL), (2, _V2_DDL)]
 
 
 def schema_version(conn: sqlite3.Connection) -> int:

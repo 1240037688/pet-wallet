@@ -33,27 +33,30 @@ def _indexes(conn: sqlite3.Connection) -> set[str]:
 def test_migrate_fresh_db_creates_full_v1_schema(tmp_path):
     conn = db.connect(tmp_path / "whale.db")
     version = migrations.migrate(conn)
-    assert version == migrations.SCHEMA_VERSION == 1
+    assert version == migrations.SCHEMA_VERSION == 2  # v2: honest NULL pricing (M3)
     missing = EXPECTED_TABLES - _tables(conn)
     assert not missing, f"missing tables: {missing}"
     assert EXPECTED_INDEXES <= _indexes(conn)
+    # v2 relaxed turn_cost NOT NULL cost → cost columns carry a status reason
+    cost_cols = {r[1] for r in conn.execute("PRAGMA table_info(turn_cost)")}
+    assert {"pricing_status", "pricing_snapshot_json"} <= cost_cols
     # version recorded in whale_meta
     row = conn.execute("SELECT value FROM whale_meta WHERE key='schema_version'").fetchone()
-    assert row[0] == "1"
+    assert row[0] == str(migrations.SCHEMA_VERSION)
     conn.close()
 
 
 def test_migrate_is_idempotent(tmp_path):
     conn = db.connect(tmp_path / "whale.db")
-    assert migrations.migrate(conn) == 1
+    assert migrations.migrate(conn) == migrations.SCHEMA_VERSION
     tables_before = _tables(conn)
-    assert migrations.migrate(conn) == 1  # no-op second run
+    assert migrations.migrate(conn) == migrations.SCHEMA_VERSION  # no-op second run
     assert _tables(conn) == tables_before
-    # a fresh handle (restart simulation) also stays at v1 with no duplicates
+    # a fresh handle (restart simulation) also stays at the current version
     conn.close()
     conn2 = db.connect(tmp_path / "whale.db")
-    assert migrations.schema_version(conn2) == 1
-    assert migrations.migrate(conn2) == 1
+    assert migrations.schema_version(conn2) == migrations.SCHEMA_VERSION
+    assert migrations.migrate(conn2) == migrations.SCHEMA_VERSION
     assert _tables(conn2) == tables_before
     conn2.close()
 
@@ -68,31 +71,33 @@ def test_migrate_backs_up_existing_db_before_upgrade(tmp_path):
     seed.close()
 
     conn = db.connect(path)
-    assert migrations.migrate(conn) == 1
+    assert migrations.migrate(conn) == migrations.SCHEMA_VERSION
     conn.close()
 
-    backup = path.with_name("whale.db.bak-1")
-    assert backup.exists()
-    check = sqlite3.connect(str(backup))
-    assert check.execute("SELECT x FROM preexisting_user_data").fetchone()[0] == 42
-    check.close()
+    # one backup per migration step (v1 and v2 each copied before writing)
+    for version in (1, migrations.SCHEMA_VERSION):
+        backup = path.with_name(f"whale.db.bak-{version}")
+        assert backup.exists(), f"missing backup {backup.name}"
+        check = sqlite3.connect(str(backup))
+        assert check.execute("SELECT x FROM preexisting_user_data").fetchone()[0] == 42
+        check.close()
 
 
 def test_migration_failure_leaves_prior_state(tmp_path):
     """A failing migration rolls back and does not bump the version (fail-closed)."""
     conn = db.connect(tmp_path / "whale.db")
-    assert migrations.migrate(conn) == 1
+    assert migrations.migrate(conn) == migrations.SCHEMA_VERSION
     tables_before = _tables(conn)
 
-    broken = [(2, "CREATE TABLE v2_new(x TEXT); CREATE TABLE definitely_broken(-- oops")]
+    broken = [(migrations.SCHEMA_VERSION + 1, "CREATE TABLE v3_new(x TEXT); CREATE TABLE definitely_broken(-- oops")]
     original = list(migrations.MIGRATIONS)
     migrations.MIGRATIONS.append(broken[0])
     try:
         with pytest.raises(sqlite3.Error):
             migrations.migrate(conn)
-        assert migrations.schema_version(conn) == 1
+        assert migrations.schema_version(conn) == migrations.SCHEMA_VERSION
         assert _tables(conn) == tables_before
-        assert "v2_new" not in _tables(conn)
+        assert "v3_new" not in _tables(conn)
     finally:
         migrations.MIGRATIONS[:] = original
     conn.close()

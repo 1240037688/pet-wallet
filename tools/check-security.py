@@ -63,6 +63,9 @@ PY_ALLOWED_IMPORTS = {
     "httpx": "M4 provider client (injectable transport, TEST_PLAN §2.1)",
     "pytest": "test framework only (dashboard/tests)",
     "hermes_constants": "Hermes host runtime (guarded import; profile home resolution)",
+    "agent": "Hermes serve-process secret read (agent.secret_scope.get_secret; verified"
+             " against local hermes-agent agent/secret_scope.py:219; guarded import,"
+             " credentials never leave the Python half)",
 }
 
 # Credential-shape detection (sk-test-fake- prefix = sanctioned fake, TEST_PLAN §2.1).

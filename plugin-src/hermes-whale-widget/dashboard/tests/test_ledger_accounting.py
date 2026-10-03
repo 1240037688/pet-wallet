@@ -85,11 +85,14 @@ def test_acc01_usage_event_and_turn_cost_written(conn):
 
     tc = costs[0]
     assert tc["dedup_key"] == ev["dedup_key"]
-    # M2 boundary: pricing not landed → token_only + 0 units, NULL snapshot
-    assert tc["cost_basis"] == "token_only"
-    assert tc["estimated_cost_units"] == 0
-    assert tc["pricing_snapshot_json"] is None
-    assert tc["currency"] == "none"
+    # M3 pricing landed: deepseek-chat resolves from the builtin CNY table
+    # (miss 2 / hit 0.04 / out 8 per 1M; reasoning ⊆ output, no cache-write
+    # billing) → 100×2 + 5×0.04 + 50×8 = 600.20 CNY-e8 units = 60_020
+    assert tc["cost_basis"] == "whale_pricing"
+    assert tc["pricing_status"] == "whale_pricing"
+    assert tc["estimated_cost_units"] == 60_020
+    assert tc["pricing_snapshot_json"] is not None
+    assert tc["currency"] == "CNY"
     assert tc["status"] == "final"
 
 
@@ -259,14 +262,18 @@ def test_compute_delta_reset_semantics():
 def test_daily_summary_rollup_per_model(conn):
     ingest_turn(conn, _turn(model="deepseek-chat", input=100, output=50))
     ingest_turn(conn, _turn(model="deepseek-reasoner", received_at=BASE_MS + 60_000, input=10))
-    row = conn.execute("SELECT * FROM daily_summary WHERE track='usage'").fetchone()
-    assert row["scope"] == "usage:default:none"
-    assert row["day"] == local_day_key(BASE_MS)
-    assert row["estimated_cost_units"] is None  # M2: cost fields stay NULL
-    data = json.loads(row["tokens_json"])
-    assert data["total"]["input"] == 110 and data["total"]["output"] == 50
+    # M3: scope carries the settlement currency — the priced turn books CNY,
+    # the reset turn (token_only) books the 'none' scope; both coexist.
+    rows = {r["scope"]: r for r in conn.execute("SELECT * FROM daily_summary WHERE track='usage'").fetchall()}
+    assert set(rows) == {"usage:default:CNY", "usage:default:none"}
+    cny = rows["usage:default:CNY"]
+    assert cny["day"] == local_day_key(BASE_MS)
+    assert cny["estimated_cost_units"] == 60_000  # only the priced turn
+    data = json.loads(cny["tokens_json"])
+    assert data["total"]["input"] == 100 and data["total"]["output"] == 50
     assert data["models"]["deepseek-chat"]["input"] == 100
-    assert data["models"]["deepseek-reasoner"]["input"] == 10
+    none_row = rows["usage:default:none"]
+    assert json.loads(none_row["tokens_json"])["total"]["input"] == 10  # reset absolute
 
 
 # ---------------------------------------------------------------------------

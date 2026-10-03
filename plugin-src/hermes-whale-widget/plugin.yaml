@@ -1,0 +1,3 @@
+name: whale-widget
+version: "0.1.0"
+description: Whale accounting widget for Hermes — usage/balance ledger, floating whale and bubbles (unified package: agent stub + dashboard API + desktop UI)

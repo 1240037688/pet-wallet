@@ -5,3 +5,6 @@ dist/
 *.log
 .env
 __pycache__/
+.venv/
+tools/.preview-build/
+.pytest-tmp/

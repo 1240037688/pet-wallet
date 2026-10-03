@@ -1,0 +1,28 @@
+# Catalog PR sidecar for NousResearch/hermes-agent → plugin-catalog/whale-widget.yaml
+#
+# M0 STATUS: DRAFT — finalized in M13 (see IMPLEMENTATION_PLAN §M13).
+#   - `repo` and `sha` are placeholders until the plugin has a public repo with
+#     a tagged release. Per the catalog PR checklist (see
+#     D:\hermes\plugins\ai-usage-tracker\catalog\ai-usage-tracker.yaml for the
+#     field-for-field reference of a real, accepted entry):
+#       1. owner-submitted PR, 2. public repo, 3. real release tag,
+#       4. validation green, 5. pin settled >= 2 weeks, 6. capabilities match
+#       what the plugin registers at the pinned commit.
+#   - `sha` must stay QUOTED (all-digit SHA would parse as a YAML integer).
+#   - M8 must flip `provides_hooks` to reflect the approval observation hooks.
+name: whale-widget
+repo: "TBD-before-M13 (public https git URL of this plugin's repo)"
+sha: ""            # 40-hex pin of the tagged release commit; filled in M13
+description: Whale accounting widget — dual-track AI usage ledger (estimate vs
+  observed balance), floating whale with bubbles, budget/low-balance/waiting
+  reminders, per Hermes profile.
+maintainer: TBD
+tier: community
+requires_hermes: ">=0.21"
+platforms: [windows]   # other platforms unverified; widen only after testing
+docs_url: "TBD-before-M13"
+capabilities:
+  provides_tools: []
+  provides_hooks: []      # M8: approval observation hooks (pre/post approval)
+  provides_middleware: []
+  requires_env: []

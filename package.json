@@ -1,0 +1,24 @@
+{
+  "name": "hermes-whale-widget-dev",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Dev scaffold for the hermes-whale-widget plugin (NOT published; the plugin artifact is desktop/plugin.js).",
+  "type": "module",
+  "scripts": {
+    "build": "node tools/build-desktop.mjs",
+    "lint": "node tools/check-security.mjs",
+    "check": "node tools/check-security.mjs && node --check plugin-src/hermes-whale-widget/desktop/plugin.js",
+    "test": "node --test \"plugin-src/hermes-whale-widget/desktop/tests/*.test.mjs\"",
+    "test:py": ".venv/Scripts/python.exe -m pytest plugin-src/hermes-whale-widget/dashboard/tests -q --basetemp=.pytest-tmp",
+    "preview": "node tools/dev-preview.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "comments": {
+    "esbuild": "AGENTS.md §10 dependency justification: Hermes has no official bundler; the runtime-loader accepts ONLY a single-file ESM with a strict import whitelist (@hermes/plugin-sdk + react*), so esbuild is required to produce desktop/plugin.js from desktop/src/.",
+    "react": "Intentionally NOT a plugin dependency: react and @hermes/plugin-sdk are runtime-provided by Hermes and stay external in the bundle. The react/react-dom copies here are dev-preview/test shims only (tools/dev-preview.mjs bundles them into the preview page; they never enter the artifact)."
+  }
+}

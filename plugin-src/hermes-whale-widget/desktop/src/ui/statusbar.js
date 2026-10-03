@@ -1,8 +1,9 @@
 /**
- * Statusbar chip — the M0 placeholder surface.
+ * Statusbar chip — connectivity + ledger-availability surface.
  *
- * Shows "Whale widget placeholder" plus dashboard-half connectivity:
- *   ● ok / ◐ degraded (ledger_error) / ○ unreachable / ◌ checking
+ * Shows "Whale widget" plus dashboard-half health and ingest state:
+ *   ● ok / ◐ degraded (ledger_error) / ○ unreachable / ◌ checking,
+ *   plus「记账暂不可用」while the ingest client is in the dead-letter state.
  * Real numeric display (estimated today / observed balance) arrives in M5.
  */
 import { useValue } from '@hermes/plugin-sdk'
@@ -26,17 +27,24 @@ function healthLabel(health) {
   }
 }
 
-export function WhaleChip({ $health }) {
+function ingestLabel(ingest) {
+  if (!ingest?.unavailable) return ''
+  const dead = ingest.deadLetters ?? 0
+  return ` · 记账暂不可用${dead > 0 ? ` (${dead})` : ''}`
+}
+
+export function WhaleChip({ $health, $ingest }) {
   const health = useValue($health)
+  const ingest = $ingest ? useValue($ingest) : { unavailable: false, deadLetters: 0 }
   const glyph = GLYPHS[health.state] ?? GLYPHS.checking
   return jsx('span', {
     className: 'whale-widget-chip',
     title: 'Whale widget — dashboard connectivity',
     style: { display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'default' },
-    children: `${glyph} Whale widget placeholder · ${healthLabel(health)}`,
+    children: `${glyph} Whale widget · ${healthLabel(health)}${ingestLabel(ingest)}`,
   })
 }
 
-export function renderWhaleChip($health) {
-  return jsx(WhaleChip, { $health })
+export function renderWhaleChip($health, $ingest) {
+  return jsx(WhaleChip, { $health, $ingest })
 }

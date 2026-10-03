@@ -23,24 +23,41 @@ function healthLabel(health) {
       return health.state;
   }
 }
-function WhaleChip({ $health: $health2 }) {
+function ingestLabel(ingest) {
+  if (!ingest?.unavailable) return "";
+  const dead = ingest.deadLetters ?? 0;
+  return ` \xB7 \u8BB0\u8D26\u6682\u4E0D\u53EF\u7528${dead > 0 ? ` (${dead})` : ""}`;
+}
+function WhaleChip({ $health: $health2, $ingest: $ingest2 }) {
   const health = useValue($health2);
+  const ingest = $ingest2 ? useValue($ingest2) : { unavailable: false, deadLetters: 0 };
   const glyph = GLYPHS[health.state] ?? GLYPHS.checking;
   return jsx("span", {
     className: "whale-widget-chip",
     title: "Whale widget \u2014 dashboard connectivity",
     style: { display: "inline-flex", alignItems: "center", gap: "6px", cursor: "default" },
-    children: `${glyph} Whale widget placeholder \xB7 ${healthLabel(health)}`
+    children: `${glyph} Whale widget \xB7 ${healthLabel(health)}${ingestLabel(ingest)}`
   });
 }
-function renderWhaleChip($health2) {
-  return jsx(WhaleChip, { $health: $health2 });
+function renderWhaleChip($health2, $ingest2) {
+  return jsx(WhaleChip, { $health: $health2, $ingest: $ingest2 });
 }
 
 // plugin-src/hermes-whale-widget/desktop/src/core/normalize.js
 function normalizeUsage(usage) {
   if (!usage || typeof usage !== "object") {
-    return { input: null, output: null, reasoning: null, cache_read: null, cache_write: null, calls: null, cost_usd: null };
+    return {
+      input: null,
+      output: null,
+      reasoning: null,
+      cache_read: null,
+      cache_write: null,
+      calls: null,
+      cost_usd: null,
+      context_used: null,
+      context_max: null,
+      context_percent: null
+    };
   }
   const num = (value) => Number.isFinite(value) ? value : null;
   return {
@@ -50,14 +67,22 @@ function normalizeUsage(usage) {
     cache_read: num(usage.cache_read_tokens ?? usage.cache_read),
     cache_write: num(usage.cache_write_tokens ?? usage.cache_write),
     calls: num(usage.calls),
-    cost_usd: num(usage.cost_usd)
+    cost_usd: num(usage.cost_usd),
+    context_used: num(usage.context_used),
+    context_max: num(usage.context_max),
+    context_percent: num(usage.context_percent)
   };
+}
+function hasMeasurableUsage(usage) {
+  if (!usage || typeof usage !== "object") return false;
+  return [usage.input, usage.output, usage.reasoning, usage.cache_read, usage.cache_write, usage.calls].some((v) => v !== null && v !== void 0);
 }
 function normalizeEvent(raw) {
   if (!raw || typeof raw !== "object" || typeof raw.type !== "string") return null;
   const type = raw.type;
   const payload = raw.payload ?? {};
   const base = { session_id: raw.session_id ?? null, profile: raw.profile ?? null };
+  const replayed = raw.replayed === true;
   switch (type) {
     case "message.start":
       return { kind: "TURN_STARTED", ...base };
@@ -66,11 +91,18 @@ function normalizeEvent(raw) {
     // internal: never resets animation (M6 discipline)
     case "session.usage":
       return { kind: "USAGE_UPDATED", final: false, usage: normalizeUsage(payload.usage), ...base };
+    case "session.info":
+      return {
+        kind: "SESSION_INFO",
+        model: typeof payload?.model === "string" && payload.model ? payload.model : null,
+        provider: typeof payload?.provider === "string" && payload.provider ? payload.provider : null,
+        ...base
+      };
     case "message.complete": {
-      const raw2 = payload?.status;
-      const status = raw2 === "error" || raw2 === "interrupted" ? raw2 : "ok";
+      const rawStatus = payload?.status;
+      const status = rawStatus === "error" || rawStatus === "interrupted" ? rawStatus : "ok";
       const events = [
-        { kind: "TURN_FINISHED", status, usage: normalizeUsage(payload?.usage), ...base }
+        { kind: "TURN_FINISHED", status, usage: normalizeUsage(payload?.usage), replayed, ...base }
       ];
       if (status === "ok") {
         events.push({ kind: "TASK_COMPLETED", ...base });
@@ -87,17 +119,326 @@ function normalizeEvent(raw) {
     case "error":
       return { kind: "ERROR", reason: payload?.message ?? "unknown error", ...base };
     case "gateway.reconnecting":
+      return { kind: "CONNECTION_CHANGED", phase: "reconnecting", attempt: payload?.attempt ?? null, ...base };
+    case "gateway.ready":
+      return { kind: "CONNECTION_CHANGED", phase: "ready", replay_epoch: payload?.replayEpoch ?? null, ...base };
     case "host.state.gateway":
-      return { kind: "CONNECTION_CHANGED", ...base };
+      return { kind: "CONNECTION_CHANGED", phase: "state", ...base };
+    case "approval.cancelled":
+      return { kind: "APPROVAL_CLEARED", ...base };
+    default:
+      return null;
+  }
+}
+function normalizeEventList(raw) {
+  const result = normalizeEvent(raw);
+  if (result === null) return [];
+  return Array.isArray(result) ? result : [result];
+}
+function createNormalizer() {
+  const stats = { seen: 0, emitted: 0, droppedUnknown: 0, unknownTypes: {} };
+  return {
+    normalize(raw) {
+      stats.seen++;
+      const events = normalizeEventList(raw);
+      if (events.length === 0 && (raw && typeof raw === "object" && typeof raw.type === "string")) {
+        stats.droppedUnknown++;
+        const t = raw.type;
+        stats.unknownTypes[t] = (stats.unknownTypes[t] ?? 0) + 1;
+      }
+      stats.emitted += events.length;
+      return events;
+    },
+    stats() {
+      return { ...stats, unknownTypes: { ...stats.unknownTypes } };
+    }
+  };
+}
+
+// plugin-src/hermes-whale-widget/desktop/src/core/turn-tracker.js
+function createTurnTracker() {
+  return {
+    turns: /* @__PURE__ */ new Map(),
+    // session_id -> open-turn bucket
+    sessions: /* @__PURE__ */ new Map(),
+    // session_id -> {model, profile} durable-per-process facts
+    reconnecting: false,
+    // set by gateway.reconnecting; consumed by first settle
+    salvage: null
+    // {session_id, usage} from host.state.focusedUsage
+  };
+}
+function rememberSessionInfo(tracker, event) {
+  if (!event || event.kind !== "SESSION_INFO" || !event.session_id) return;
+  const known = tracker.sessions.get(event.session_id) ?? { model: null, profile: null };
+  if (event.model) known.model = event.model;
+  if (event.provider) known.provider = event.provider;
+  tracker.sessions.set(event.session_id, known);
+  const bucket = tracker.turns.get(event.session_id);
+  if (bucket && event.model) bucket.model = event.model;
+}
+function markReconnecting(tracker, { salvageUsage = null, salvageSessionId = null } = {}) {
+  tracker.reconnecting = true;
+  if (salvageUsage) {
+    const usage = normalizeUsage(salvageUsage);
+    if (hasMeasurableUsage(usage)) tracker.salvage = { session_id: salvageSessionId, usage };
+  }
+}
+function markReconnected(tracker) {
+  tracker.reconnecting = false;
+}
+function applyFocusedUsage(tracker, focusedUsage, { sessionId = null } = {}) {
+  if (!focusedUsage) return false;
+  const usage = normalizeUsage(focusedUsage);
+  if (!hasMeasurableUsage(usage)) return false;
+  tracker.salvage = { session_id: sessionId, usage };
+  return true;
+}
+function resolveModel(tracker, event, meta, sessionId) {
+  const bucket = tracker.turns.get(sessionId);
+  if (bucket?.model) return bucket.model;
+  const known = tracker.sessions.get(sessionId);
+  if (known?.model) return known.model;
+  if (meta?.model) return meta.model;
+  return null;
+}
+function resolveProfile(event, meta, sessionId) {
+  if (event.profile) return event.profile;
+  if (meta?.profile) return meta.profile;
+  return null;
+}
+function payloadStatus(event) {
+  if (event.status === "error" || event.status === "interrupted") return event.status;
+  return "complete";
+}
+function ingestWhaleEvent(tracker, event, meta = {}) {
+  if (!tracker || !event || typeof event !== "object") return null;
+  const sessionId = event.session_id;
+  switch (event.kind) {
+    case "TURN_STARTED": {
+      if (!sessionId) return null;
+      if (!tracker.turns.has(sessionId)) {
+        tracker.turns.set(sessionId, {
+          session_id: sessionId,
+          profile: event.profile ?? null,
+          model: meta.model ?? null,
+          startedAt: meta.receivedAt ?? null,
+          lastHeartbeat: null
+        });
+      }
+      return null;
+    }
+    case "SESSION_INFO":
+      rememberSessionInfo(tracker, event);
+      return null;
+    case "USAGE_UPDATED": {
+      if (event.final) return null;
+      if (!sessionId || !event.usage || !hasMeasurableUsage(event.usage)) return null;
+      const bucket = tracker.turns.get(sessionId);
+      if (bucket) bucket.lastHeartbeat = event.usage;
+      return null;
+    }
+    case "TURN_FINISHED": {
+      if (!sessionId) return null;
+      const bucket = tracker.turns.get(sessionId);
+      const known = tracker.sessions.get(sessionId);
+      const usage = (hasMeasurableUsage(event.usage) ? event.usage : null) ?? (bucket?.lastHeartbeat && hasMeasurableUsage(bucket.lastHeartbeat) ? bucket.lastHeartbeat : null) ?? (tracker.salvage && (tracker.salvage.session_id === sessionId || tracker.salvage.session_id == null) ? tracker.salvage.usage : null);
+      if (event.profile || known?.profile || bucket?.profile) {
+        tracker.sessions.set(sessionId, {
+          model: known?.model ?? bucket?.model ?? null,
+          profile: event.profile ?? known?.profile ?? bucket?.profile ?? null
+        });
+      }
+      tracker.turns.delete(sessionId);
+      const afterReconnect = tracker.reconnecting === true;
+      const payload = {
+        session_id: sessionId,
+        profile: resolveProfile(event, meta, sessionId) ?? null,
+        model: resolveModel(tracker, event, meta, sessionId),
+        usage: usage ?? null,
+        received_at: meta.receivedAt ?? null,
+        status: payloadStatus(event),
+        after_reconnect: afterReconnect,
+        replayed: event.replayed === true,
+        usage_source: hasMeasurableUsage(event.usage) ? "complete" : usage ? bucket?.lastHeartbeat === usage ? "heartbeat" : "focused" : null
+      };
+      if (usage) {
+        tracker.reconnecting = false;
+        tracker.salvage = null;
+        return payload;
+      }
+      return null;
+    }
     default:
       return null;
   }
 }
 
+// plugin-src/hermes-whale-widget/desktop/src/core/ingest-client.js
+var INGEST_TURN_PATH = "/ingest/turn";
+var MAX_RETRIES = 3;
+var BACKOFF_BASE_MS = 250;
+var MAX_BATCH = 20;
+var QUEUE_LIMIT = 200;
+var DEAD_LETTER_LIMIT = 50;
+var defaultDelay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+function createIngestClient({
+  rest,
+  maxRetries = MAX_RETRIES,
+  backoffBaseMs = BACKOFF_BASE_MS,
+  maxBatch = MAX_BATCH,
+  queueLimit = QUEUE_LIMIT,
+  deadLetterLimit = DEAD_LETTER_LIMIT,
+  delay = defaultDelay,
+  onUnavailable,
+  onRecovered,
+  onStats
+} = {}) {
+  if (typeof rest !== "function") throw new TypeError("createIngestClient: rest adapter is required");
+  const state = {
+    queue: [],
+    deadLetters: [],
+    dropped: 0,
+    sent: 0,
+    failed: 0,
+    unavailable: false,
+    paused: false,
+    flushing: false,
+    scheduled: false
+  };
+  function setUnavailable(reason) {
+    state.failed++;
+    if (!state.unavailable) {
+      state.unavailable = true;
+      try {
+        onUnavailable?.({ reason });
+      } catch {
+      }
+    }
+  }
+  function setRecovered() {
+    if (state.unavailable) {
+      state.unavailable = false;
+      try {
+        onRecovered?.();
+      } catch {
+      }
+    }
+  }
+  async function postWithRetry(turns) {
+    let attempt = 0;
+    for (; ; ) {
+      try {
+        const response = await rest(INGEST_TURN_PATH, { turns });
+        setRecovered();
+        state.sent += turns.length;
+        return response;
+      } catch (err) {
+        if (attempt >= maxRetries) {
+          if (state.deadLetters.length >= deadLetterLimit) state.deadLetters.shift();
+          state.deadLetters.push({ turns, error: String(err?.message || err || "unknown"), at: Date.now() });
+          setUnavailable(String(err?.message || err || "unknown"));
+          return null;
+        }
+        await delay(backoffBaseMs * 2 ** attempt);
+        attempt++;
+      }
+    }
+  }
+  async function flush() {
+    if (state.flushing || state.paused) return;
+    state.flushing = true;
+    try {
+      while (state.queue.length > 0 && !state.paused) {
+        const batch = state.queue.splice(0, maxBatch);
+        const ok = await postWithRetry(batch);
+        if (!ok) {
+          break;
+        }
+      }
+    } finally {
+      state.flushing = false;
+      notifyStats();
+    }
+  }
+  function scheduleFlush() {
+    if (state.scheduled) return;
+    state.scheduled = true;
+    queueMicrotask(() => {
+      state.scheduled = false;
+      void flush();
+    });
+  }
+  function notifyStats() {
+    try {
+      onStats?.();
+    } catch {
+    }
+  }
+  return {
+    /** Enqueue a settled turn payload; schedules a non-blocking flush. */
+    submitTurn(payload) {
+      if (!payload || typeof payload !== "object") return;
+      if (state.queue.length >= queueLimit) {
+        state.queue.shift();
+        state.dropped++;
+        notifyStats();
+      }
+      state.queue.push(payload);
+      scheduleFlush();
+    },
+    /** Send everything queued right now (tests / resume). Resolves when idle. */
+    async flushAndWait() {
+      await flush();
+      notifyStats();
+    },
+    pause() {
+      state.paused = true;
+      notifyStats();
+    },
+    resume() {
+      state.paused = false;
+      while (state.deadLetters.length > 0 && state.queue.length < queueLimit) {
+        const item = state.deadLetters.shift();
+        state.queue.push(...item.turns);
+      }
+      void flush();
+    },
+    isPaused() {
+      return state.paused;
+    },
+    isUnavailable() {
+      return state.unavailable;
+    },
+    stats() {
+      return {
+        queued: state.queue.length,
+        deadLetters: state.deadLetters.length,
+        dropped: state.dropped,
+        sent: state.sent,
+        failed: state.failed,
+        unavailable: state.unavailable,
+        paused: state.paused,
+        deadLetterItems: state.deadLetters.map((d) => ({ error: d.error, at: d.at, turns: d.turns.length }))
+      };
+    }
+  };
+}
+
 // plugin-src/hermes-whale-widget/desktop/src/main.js
 var ID = "whale-widget";
 var $health = atom({ state: "checking", version: null, schema_version: null, detail: null });
+var $ingest = atom({ unavailable: false, queued: 0, deadLetters: 0, dropped: 0 });
 var HEALTH_POLL_MS = 6e4;
+var SUBSCRIBED_EVENTS = [
+  "message.start",
+  "session.usage",
+  "message.complete",
+  "session.info",
+  "gateway.reconnecting",
+  "gateway.ready",
+  "error"
+];
 async function probeHealth(ctx) {
   try {
     const data = await ctx.rest("/health");
@@ -111,16 +452,55 @@ async function probeHealth(ctx) {
     $health.set({ state: "unreachable", version: null, schema_version: null, detail: String(err?.message || err || "unknown") });
   }
 }
+function publishIngestStats(client) {
+  const s = client.stats();
+  $ingest.set({ unavailable: s.unavailable, queued: s.queued, deadLetters: s.deadLetters, dropped: s.dropped });
+}
 var main_default = {
   id: ID,
   name: "Whale Widget",
   register(ctx) {
-    let eventCount = 0;
+    const normalizer = createNormalizer();
+    const tracker = createTurnTracker();
+    const client = createIngestClient({
+      rest: (path, body) => ctx.rest(path, { method: "POST", body: JSON.stringify(body) }),
+      onUnavailable: () => publishIngestStats(client),
+      onRecovered: () => publishIngestStats(client),
+      onStats: () => publishIngestStats(client)
+    });
+    const captureFocusedSalvage = () => {
+      const focusedUsage = host.state?.focusedUsage ?? null;
+      const sessionId = host.state?.focusedSessionId ?? null;
+      if (focusedUsage) applyFocusedUsage(tracker, focusedUsage, { sessionId });
+    };
+    const handleGatewayEvent = (raw) => {
+      const events = normalizer.normalize(raw);
+      if (events.length === 0) return;
+      const meta = {
+        receivedAt: Date.now(),
+        model: host.state?.model ?? null,
+        profile: raw?.profile ?? host.state?.profile ?? null
+      };
+      for (const event of events) {
+        if (event.kind === "CONNECTION_CHANGED") {
+          if (event.phase === "reconnecting") {
+            markReconnecting(tracker);
+            captureFocusedSalvage();
+            client.pause();
+          } else if (event.phase === "ready") {
+            markReconnected(tracker);
+            captureFocusedSalvage();
+            client.resume();
+          }
+          continue;
+        }
+        const payload = ingestWhaleEvent(tracker, event, meta);
+        if (payload) client.submitTurn(payload);
+      }
+      publishIngestStats(client);
+    };
     try {
-      ctx.onEvent?.("*", (event) => {
-        eventCount++;
-        if (event && typeof event === "object") normalizeEvent(event);
-      });
+      for (const type of SUBSCRIBED_EVENTS) ctx.onEvent?.(type, handleGatewayEvent);
     } catch {
     }
     void probeHealth(ctx);
@@ -133,16 +513,18 @@ var main_default = {
       id: "chip",
       area: STATUSBAR_AREAS.right,
       order: 126,
-      render: () => renderWhaleChip($health)
+      render: () => renderWhaleChip($health, $ingest)
     });
     try {
-      host.notify?.({ message: "Whale widget placeholder loaded (M0)" });
+      host.notify?.({ message: "Whale widget loaded (M1: usage capture \u2192 ledger ingest)" });
     } catch {
     }
   }
 };
 export {
   $health,
+  $ingest,
+  SUBSCRIBED_EVENTS,
   main_default as default,
   probeHealth
 };

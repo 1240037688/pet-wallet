@@ -57,3 +57,50 @@
 ### 下一阶段
 
 M1 Usage 捕获与归一化（normalize 全量映射 + ingest-client 退避重试 + `/ingest/turn` 契约 stub + replay harness）。
+
+## 2026-10-03 — M1+M2 完成：Usage 捕获与归一化 + 账本落库（幂等 dedup / watermark / 日聚合 / 归档）
+
+### 完成了什么
+
+**desktop 半体（M1，全部纯逻辑可 node:test）**：
+- `desktop/src/core/normalize.js`（158 行）：Hermes 网关事件 → 归一化鲸鱼事件全量映射。`message.complete` 按 status 分流（complete→`TURN_FINISHED{ok}`+`TASK_COMPLETED`；error/interrupted→`TURN_FINISHED`+`ERROR`）；`session.usage`→`USAGE_UPDATED{final:false}`（心跳只进内存，永不落库）；`session.info`→`SESSION_INFO`（turn 归因输入）；`tool.*`→内部 `TOOL_ACTIVITY`；`gateway.reconnecting/ready`、`host.state.gateway`→`CONNECTION_CHANGED`；envelope `replayed` 旗标随 `TURN_FINISHED` 透传。usage 全字段 NULL 感知（缺省→null 不造 0，AUDIT §12/R4），payload 白名单提取（DM §8.4）；未知事件丢弃并由 `createNormalizer()` 计数（含 unknownTypes 分布）。
+- `desktop/src/core/turn-tracker.js`（新增，171 行）：(sessionId, turn) 分桶累加；心跳只刷新开启轮次的内存快照；`TURN_FINISHED` 结算一次——usage 取值优先级 = complete 快照 > 本轮最后心跳 > focusedUsage salvage；`after_reconnect`（重连后首个带 usage 的结算打标，只消费一次）与 `replayed` 透传；`usage_source`（complete/heartbeat/focused）溯源；无 measurable usage 不产生载荷、不消耗重连标记。
+- `desktop/src/core/ingest-client.js`（新增，216 行）：`{turns:[...]}` 批量 POST `/ingest/turn`（≤20/批，队列上限 200，丢最旧计数）；指数退避重试 ≤3 次后进内存死信（上限 50）并置 `unavailable`（芯片提示「记账暂不可用」）；`gateway.reconnecting` 期间 `pause()` 不发送，`resume()` 时死信回队重试；fire-and-forget 不阻塞退出、不落盘（AGENTS.md §8：JS 半体无持久化）。
+- `desktop/src/main.js`（重写装配）：订阅 `message.start/session.usage/message.complete/session.info/gateway.reconnecting/gateway.ready/error`（register 期订阅随卸载自动清理）；重连前后捕获 `host.state.focusedUsage` 兜底快照（防漏记；幂等最终由 Python dedup_key 保证）；`$health`/`$ingest` 状态出芯片；60s health 轮询。
+
+**dashboard 半体（M2）**：
+- `whale_core/ingest.py`（612 行，替换 M1 stub）：幂等结算引擎——`dedup_key` 按 DM §3.2 公式实现（sha256 截 40，固定测试向量钉住）；内容查重先于 turn_seq 分配（同 session+同分钟+同累计快照→duplicate），±10min 模糊窗承接重连重放的分钟漂移，UNIQUE 索引作并发竞态兜底；SessionWatermark upsert（逐字段单调 max，永不回拖）；计数器重置检测（快照<水位 → provisional + token_only + 重置后绝对值（新基线 0，绝无负增量）+ reset_count+1）；`after_reconnect:true`/`replayed:true` 首条 complete 只对齐水位不结算（DM §3.4）；无 measurable usage 跳过不落行（不造 0）；`daily_summary(track='usage')` 每 turn upsert（total+per-model token 计数合并）；单 turn 单事务。
+- `whale_core/usage_ledger.py`（新增，189 行）：`/usage/summary`（今日汇总 + 7 天窗、per_model 分组、partial_flags{partial_days, provisional_turns}、estimated 字段 M2 阶段恒 null + basis='token_only' 声明）、`/usage/turns`（最近 N 轮 join TurnCost、session 过滤、limit 1..100）。命名 lint 遵守 DM §8.1（无裸 cost/spend/used，有测试）。
+- `whale_core/archive.py`（新增，166 行）：保留策略执行器（90d/2 万条→archive 不删除、archive 20 万上限丢最旧、daily_summary 365d→summary_archive、notification/watermark 直删）；`maybe_daily_tick` 每本地日一次（whale_meta 记 guard），ingest 后顺手 prune，无 timer（AGENTS.md §8）。
+- `whale_core/api.py`（扩展）：`POST /ingest/turn`（单条或 `{turns:[...]}` ≤100、畸形 400 且错误信息不回显 payload 值、账本损坏 fail-closed 503、回环守卫）、`GET /usage/summary`、`GET /usage/turns`。
+- `desktop/src/ui/statusbar.js`（扩展）：芯片显示 ingest 可用性（unavailable/queued/deadLetters/dropped）。
+
+### 设计变化 / 与计划偏差
+
+1. **turn_cost.estimated_cost_units 的「无价」表示**：DDL 列 NOT NULL，M2 无 pricing → 存 `0 + cost_basis='token_only' + currency='none'`（文档化占位）；`daily_summary.estimated_cost_units` 存 NULL；查询层把占位币种映射回 null（「null ≠ 0」序列化契约有测试钉住）。M3 接管后由 pricing 决策覆盖。
+2. **dedup 硬化（超出 DM §3.2 的 UNIQUE-only）**：`turn_seq` 由 Python 按次分配，重放时键内 turn_seq 变化 → 仅靠 UNIQUE 会漏判。实现为「同 (session, minute_bucket, cumulative_json 内容) 查重 → duplicate」+ ±10min 模糊窗（网关 envelope 无稳定时间戳，AUDIT §3.1），dedup_key 公式仍完整实现且被固定向量钉住、UNIQUE 作竞态兜底。DM §3.6-R2（同分钟同内容真实两轮少记一轮）为已知可接受残留。
+3. **归一化事件集口径**：`USER_INPUT_REQUIRED`/`APPROVAL_REQUIRED` 不从网关事件产生（M8 wait 观测/agent hook 桥），`BALANCE_LOW`/`BUDGET_REACHED` 是 Python 规则输出——normalize.js 头注释声明，与 [AD] §4 一致。
+4. `received_at` 取 JS 墙钟 `Date.now()`；`day`/`minute_bucket` 由 Python 侧计算（day=本地时区，DR-12；minute=epoch 分钟，时区无关）。
+5. `whale_core/track3.py`（计划 M2 任务 5，标注「可选轨」）仍为占位——本轮任务书 M2 交付清单未含，留待后续里程碑；M2 验收的归档/幂等/watermark/日聚合条目均已交付。
+6. `tools/replay-events.mjs`（计划 M1 任务 5）未建：INT-01/02 链路已由两层进程内测试等效覆盖（pytest fixtures → ingest → DB/REST 断言；node 事件 → normalize → tracker → mock ctx.rest），JS 载荷键集（register.test）与 Python 校验白名单（ingest contract test）两侧各自钉死防漂移；独立 uvicorn-spawn harness 留待 M5 真机冒烟前补。
+7. statusbar 芯片扩展 ingest 状态显示（计划未列）——死信「记账暂不可用」UI 提示要求的最小落点。
+
+### 测试结果（全部真实输出）
+
+- `.venv/Scripts/python.exe -m pytest plugin-src/hermes-whale-widget/dashboard/tests -q --basetemp=.pytest-tmp` → **94 passed**（ingest contract 26 / ledger accounting 18 / usage endpoints 7 / archive 6 + M0 回归 config 14 / logging 9 / migrations 7 / health 7）。
+- `node --test`（npm test glob）→ **49 passed, 0 failed**（normalize 17 / turn-tracker 14 / ingest-client 9 / artifact 5 / register 4——register 4 条经 loader hook 加载**构建产物**+mock ctx 走完 M1 全管线：register→事件→结算→POST→断连对齐→降级面）。
+- `node tools/build-desktop.mjs` → OK（`desktop/plugin.js` 17.6KB 单文件 ESM；`dist/desktop/plugin.js` 副本同步）。
+- `node tools/check-security.mjs` → OK；`.venv/Scripts/python.exe tools/check-security.py` → OK（70 文件）；`node --check plugin.js` → OK。
+
+ACC 域覆盖：ACC-01（五类 token/turn_seq/day/双 JSON 留存）✓；ACC-02（同批重放×3 恒 1 行返回 duplicate；漂移分钟；窗口外真实新轮正常结算）✓；ACC-03（db 句柄重建+重放同批→无重复、turn_seq 续号；API 级 restart 同样覆盖）✓；ACC-04（相邻快照差分、双会话交错不串账、多模型）✓；ACC-05（reset→provisional/token_only/绝对值/reset_count=1，后续轮恢复 final）✓；CON-01（畸形 400×14 形态、不回显、凭据形态拒绝、fail-closed、回环 403）✓；CON-02/03（summary/turns schema、null≠0、无裸金额键）✓；INT-02 切片（after_reconnect/replayed 只对齐不结算，对齐后下一轮差分正确）✓。
+
+### 未解决问题
+
+- `session.usage`/`message.complete` 真实 payload 形状仍属「未验证」（M5 真机冒烟用 `ctx.onEvent('*')` 录制后修正 fixtures）；missing status 按 complete 宽松处理，同在 M5 核对。
+- `minute_bucket` 依赖 JS 墙钟 `received_at`；重放时钟漂移由模糊窗兜住，若网关未来提供稳定事件时间戳可换源（计划 M2 风险项）。
+- track3.py 与 replay-events.mjs 如偏差 5/6。
+- dev-preview 页面 M1 芯片状态的浏览器视觉走查待人工一次。
+
+### 下一阶段
+
+M3 Pricing（`pricing.py` 三级 basis + `money.js` 1e8 定点与 Python 同向量对拍 + `ingest.py` 结算接线 + summary per-model cost 分列）；随后 M4 余额轨②。

@@ -11,8 +11,8 @@ Mount contract (verified against the local Hermes source, M0 probe):
   * a per-request profile scope dependency wraps every route — the data
     directory therefore resolves per-profile through ``config.data_dir()``.
 
-M0 endpoints: /health, /meta, /config (GET/PUT). Business endpoints land in
-M1-M8 (IMPLEMENTATION_PLAN §3.4 REST contract table).
+M0 endpoints: /health, /meta, /config (GET/PUT). M2 adds the track① surface:
+POST /ingest/turn (idempotent settlement), GET /usage/summary, GET /usage/turns.
 
 Runtime initialisation is LAZY (first request): importing this module must
 have no side effects, so tests never touch a real data directory. Logging,
@@ -27,9 +27,9 @@ from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 
-from . import config, db, migrations, security
+from . import archive, config, db, ingest, migrations, security, usage_ledger
 from .logging_setup import get_logger, setup_logging
 
 log = get_logger("api")
@@ -160,3 +160,59 @@ def put_config(update: dict[str, Any]) -> dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     return merged
+
+
+# --------------------------------------------------------------------------
+# M2: idempotent ingest + track① usage queries
+# --------------------------------------------------------------------------
+
+def _require_ledger() -> Any:
+    """Shared write-path connection or 503 (fail-closed, DATA_MODEL §7.4)."""
+    rt = _ensure_runtime()
+    if rt.conn is None:
+        raise HTTPException(status_code=503, detail="ledger unavailable (fail-closed)")
+    return rt
+
+
+@router.post("/ingest/turn", dependencies=[Depends(security.verify_loopback)])
+def post_ingest_turn(payload: Any = Body(...)) -> dict[str, Any]:
+    """Idempotent turn settlement (REST contract table; CON-01).
+
+    Accepts a single turn object or ``{"turns": [...]}`` (max 100). Response:
+    ``{status: 'accepted'|'duplicate', accepted, duplicate[, aligned][, skipped]}``.
+    Invalid payloads → 400 with a field-level message that never echoes values.
+    """
+    rt = _require_ledger()
+    try:
+        if isinstance(payload, dict) and "turns" in payload:
+            if not isinstance(payload["turns"], list):
+                raise ingest.IngestError("ingest payload invalid: turns must be a list")
+            result = ingest.ingest_batch(rt.conn, payload["turns"])
+        else:
+            result = ingest.ingest_turn(rt.conn, payload)
+    except ingest.IngestError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    # opportunistic retention prune (single-writer; guarded to once per day)
+    try:
+        archive.maybe_daily_tick(rt.conn)
+    except Exception:  # noqa: BLE001 - prune must never fail the ingest
+        pass
+    return result
+
+
+@router.get("/usage/summary")
+def get_usage_summary(days: int = 7) -> dict[str, Any]:
+    """Today + trailing-``days`` rollup, per-model split, partial flags (CON-02)."""
+    rt = _require_ledger()
+    if days < 1 or days > 366:
+        raise HTTPException(status_code=400, detail="days must be between 1 and 366")
+    return usage_ledger.usage_summary(rt.conn, days=days)
+
+
+@router.get("/usage/turns")
+def get_usage_turns(limit: int = usage_ledger.DEFAULT_TURNS_LIMIT, session_id: str | None = None) -> dict[str, Any]:
+    """Most recent settled turns (bubble/detail data source; CON-02)."""
+    rt = _require_ledger()
+    if limit < 1 or limit > usage_ledger.MAX_TURNS_LIMIT:
+        raise HTTPException(status_code=400, detail=f"limit must be between 1 and {usage_ledger.MAX_TURNS_LIMIT}")
+    return usage_ledger.usage_turns(rt.conn, limit=limit, session_id=session_id)

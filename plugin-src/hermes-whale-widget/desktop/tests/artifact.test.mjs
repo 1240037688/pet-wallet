@@ -65,17 +65,21 @@ test('clean artifact shape produces no findings (scanner negative control)', () 
 
 test('buildTurnPayload produces the M1 ingest contract precursor shape', () => {
   const payload = buildTurnPayload(
-    { session_id: 's1', profile: 'default', status: 'complete', usage: { input: 1, output: 2 } },
+    { session_id: 's1', profile: 'default', model: 'deepseek-chat', status: 'complete', usage: { input: 1, output: 2 } },
     { receivedAt: 12345 },
   )
   assert.deepEqual(payload, {
     session_id: 's1',
     profile: 'default',
+    model: 'deepseek-chat',
     usage: { input: 1, output: 2 },
     received_at: 12345,
     status: 'complete',
     after_reconnect: false,
+    replayed: false,
   })
-  const aligned = buildTurnPayload({ session_id: 's1' }, { receivedAt: 1, afterReconnect: true })
+  const aligned = buildTurnPayload({ session_id: 's1' }, { receivedAt: 1, afterReconnect: true, replayed: true })
   assert.equal(aligned.after_reconnect, true)
+  assert.equal(aligned.replayed, true)
+  assert.equal(buildTurnPayload({ session_id: 's1', status: 'interrupted' }, { receivedAt: 1 }).status, 'interrupted')
 })

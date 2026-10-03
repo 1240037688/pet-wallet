@@ -760,10 +760,66 @@ var DEFAULT_IDLE_LINES = validateBubble({
     }
   ]
 });
+var DEFAULT_BUDGET_REACHED = validateBubble({
+  v: 1,
+  tapAdvance: false,
+  items: [
+    {
+      kind: "custom",
+      modules: [
+        { type: "text", text: "\u4ECA\u65E5\u9884\u7B97\u5DF2\u8FBE \u26A0", style: { bold: true, color: "#b3261e" } },
+        { type: "estimated_today", row: 1, style: { bold: true } },
+        { type: "text", row: 2, text: "\uFF08\u4F30\u7B97\u503C\uFF1B\u53EF\u5728\u8BBE\u7F6E\u4E2D\u8C03\u6574\u9884\u7B97\uFF09", style: { size: 10, color: "#8a93a1" } }
+      ]
+    }
+  ]
+});
+var DEFAULT_BALANCE_LOW = validateBubble({
+  v: 1,
+  tapAdvance: false,
+  items: [
+    {
+      kind: "custom",
+      modules: [
+        { type: "text", text: "\u4F59\u989D\u4E0D\u8DB3 \u26A0", style: { bold: true, color: "#b3261e" } },
+        { type: "balance", row: 1, style: { bold: true } },
+        { type: "text", row: 2, text: "\uFF08API \u5B9E\u6D4B\u4F59\u989D\uFF1B\u8BB0\u5F97\u5145\u503C\u54E6\uFF09", style: { size: 10, color: "#8a93a1" } }
+      ]
+    }
+  ]
+});
 
 // plugin-src/hermes-whale-widget/desktop/src/ui/controller.js
+var NOTIFICATION_KINDS = { budget: "budget", balance_low: "balance_low", turn_cost: "turn_cost" };
 var $whale = atom({ mood: "idle", clickCount: 0, waiting: null });
 var $bubble = atom(null);
+function notificationData(kind, payload) {
+  const currency = typeof payload.currency === "string" && payload.currency !== "none" ? payload.currency : null;
+  const units = (v) => Number.isFinite(v) ? formatMoney(v, { currency }) : null;
+  switch (kind) {
+    case "budget":
+      return {
+        estimated_today_text: units(payload.estimated_cost_units),
+        session_name: payload.day ?? null,
+        balance_text: null,
+        turn_cost_text: null
+      };
+    case "balance_low":
+      return {
+        balance_text: units(payload.observed_balance_units),
+        estimated_today_text: null,
+        session_name: payload.day ?? null,
+        turn_cost_text: null
+      };
+    default:
+      return {
+        turn_cost_text: units(payload.estimated_cost_units),
+        balance_text: null,
+        estimated_today_text: null,
+        session_name: payload.model ?? null
+      };
+  }
+}
 function createWhaleController({
   now = () => Date.now(),
   turnCostTtlMs = 5e3,
@@ -772,6 +828,9 @@ function createWhaleController({
   const machine = createWhaleState({ now });
   const queue = createBubbleQueue({ now });
   const resolver = createResolver();
+  let soundSink = null;
+  let lastWaiting = null;
+  const standingNotifKeys = /* @__PURE__ */ new Set();
   const publish = () => {
     $whale.set(machine.snapshot());
     $bubble.set(queue.view());
@@ -780,21 +839,35 @@ function createWhaleController({
   return {
     $whale,
     $bubble,
+    /** Optional sound sink (M9): {press, release, play(event)}. */
+    attachSound(sink) {
+      soundSink = sink;
+    },
     press() {
       machine.press();
+      try {
+        soundSink?.press?.();
+      } catch {
+      }
       publish();
     },
     release() {
       machine.release();
+      try {
+        soundSink?.release?.();
+      } catch {
+      }
       publish();
     },
     /** Click: first tap opens the greeting sequence, taps advance it; a
-     *  ≥4 combo (DSH §B easter-egg zone) drops a random idle line. */
+     *  ≥4 combo (DSH §B easter-egg zone) drops a random idle line — the
+     *  greeting is dismissed first so the same-rank idle line is visible. */
     click() {
       const { clickCount } = machine.click();
       if (clickCount === 1) {
         queue.show({ key: "greeting", kind: "info", def: DEFAULT_GREETING, data: {}, ttlMs: 12e3 });
       } else if (clickCount >= 4) {
+        queue.dismiss("greeting");
         queue.show({ key: "idle-line", kind: "info", def: DEFAULT_IDLE_LINES, data: {}, ttlMs: 6e3 });
       } else {
         queue.advance();
@@ -807,6 +880,10 @@ function createWhaleController({
       machine.event(kind);
       if (kind === "TASK_COMPLETED") {
         queue.show({ key: "task-done", kind: "info", def: DEFAULT_IDLE_LINES, data: {}, ttlMs: 4e3 });
+        try {
+          soundSink?.play?.("task_finished");
+        } catch {
+        }
       }
       publish();
       return machine.snapshot();
@@ -836,6 +913,44 @@ function createWhaleController({
         queue.dismiss("wait:approval");
         machine.event("APPROVAL_CLEARED");
       }
+      const nowWaiting = question ? "question" : approval ? "approval" : null;
+      if (nowWaiting && nowWaiting !== lastWaiting) {
+        try {
+          soundSink?.play?.(nowWaiting);
+        } catch {
+        }
+      }
+      lastWaiting = nowWaiting;
+      publish();
+    },
+    /** Rules-engine notifications (Goal pass P0-2): GET /notifications items →
+     *  bubbles. wait_* kinds are skipped (the wait-state chain owns them);
+     *  standing alerts (ttl 0) that recovered server-side are dismissed. */
+    syncNotifications(items) {
+      if (!Array.isArray(items)) return;
+      const seen = /* @__PURE__ */ new Set();
+      for (const n of items) {
+        if (!n || typeof n !== "object" || typeof n.dedup_key !== "string") continue;
+        const kind = NOTIFICATION_KINDS[n.kind];
+        if (!kind) continue;
+        seen.add(n.dedup_key);
+        const ttl = Number(n.ttl_ms);
+        queue.show({
+          key: n.dedup_key,
+          kind,
+          def: kind === "budget" ? DEFAULT_BUDGET_REACHED : kind === "balance_low" ? DEFAULT_BALANCE_LOW : DEFAULT_TURN_COST,
+          data: notificationData(kind, n.payload ?? {}),
+          ttlMs: Number.isFinite(ttl) && ttl > 0 ? ttl : 5e3,
+          sticky: Number.isFinite(ttl) && ttl === 0
+        });
+      }
+      for (const key of [...standingNotifKeys]) {
+        if (!seen.has(key)) {
+          queue.dismiss(key);
+          standingNotifKeys.delete(key);
+        }
+      }
+      for (const key of seen) standingNotifKeys.add(key);
       publish();
     },
     /** Balance/summary snapshot → resolver data (— semantics in resolver). */
@@ -1311,6 +1426,361 @@ function createIngestClient({
   };
 }
 
+// plugin-src/hermes-whale-widget/desktop/src/sound/engine.js
+var RELEASE_LEAD_SEC = 0.04;
+var IDLE_SUSPEND_MS = 6e4;
+var SOUND_EVENTS = ["press", "release", "task_finished", "question", "approval"];
+var DEFAULT_CLIPS = Object.freeze(
+  Object.fromEntries(SOUND_EVENTS.map((event) => [event, null]))
+);
+function clampVolume(value) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.min(1, Math.max(0, value));
+}
+function resolveVolume(eventVols, globalVol, kind) {
+  const slot = eventVols[kind];
+  if (slot && slot.volSet) return slot.vol;
+  return globalVol;
+}
+function computeReleaseStart(pressStartedAt, pressDuration, currentTime, leadSec = RELEASE_LEAD_SEC) {
+  return Math.max(currentTime, pressStartedAt + (pressDuration || 0) - leadSec);
+}
+function createSoundEngine({
+  contextFactory,
+  now = () => Date.now(),
+  fetchClip = null,
+  onDebug = null,
+  setTimer = null
+} = {}) {
+  let disposed = false;
+  let muted = false;
+  let ctx = null;
+  let ctxBroken = false;
+  let globalVol = 1;
+  const eventVols = {};
+  const baseClips = { ...DEFAULT_CLIPS };
+  let group = null;
+  const cache = /* @__PURE__ */ new Map();
+  let pressAnchor = null;
+  let lastActivityAt = null;
+  let idleSuspended = false;
+  let idleSeq = 0;
+  const activeNodes = /* @__PURE__ */ new Set();
+  function debug(kind, info) {
+    if (typeof onDebug !== "function") return;
+    try {
+      onDebug(kind, info || {});
+    } catch {
+    }
+  }
+  function errorMessage(error) {
+    const message = error && error.message ? error.message : String(error);
+    return message.slice(0, 200);
+  }
+  function nowMs() {
+    return typeof now === "function" ? now() : 0;
+  }
+  function touch() {
+    lastActivityAt = nowMs();
+    scheduleIdleCheck();
+  }
+  function scheduleIdleCheck() {
+    if (typeof setTimer !== "function") return;
+    idleSeq += 1;
+    const seq = idleSeq;
+    setTimer(() => {
+      if (disposed || seq !== idleSeq) return;
+      maybeIdleSuspend();
+      if (!idleSuspended) scheduleIdleCheck();
+    }, IDLE_SUSPEND_MS);
+  }
+  function cancelIdleCheck() {
+    idleSeq += 1;
+  }
+  function maybeIdleSuspend() {
+    if (!ctx || idleSuspended || disposed) return;
+    if (lastActivityAt === null || nowMs() - lastActivityAt < IDLE_SUSPEND_MS) return;
+    try {
+      ctx.suspend();
+    } catch (error) {
+      debug("context.suspend.failed", { message: errorMessage(error) });
+      return;
+    }
+    idleSuspended = true;
+  }
+  function ensureContext() {
+    if (ctx) return ctx;
+    if (ctxBroken) return null;
+    if (typeof contextFactory !== "function") {
+      ctxBroken = true;
+      debug("context.factory.missing");
+      return null;
+    }
+    try {
+      ctx = contextFactory({ latencyHint: "interactive" });
+    } catch (error) {
+      ctxBroken = true;
+      debug("context.create.failed", { message: errorMessage(error) });
+      return null;
+    }
+    if (!ctx) {
+      ctxBroken = true;
+      debug("context.create.failed", { message: "factory returned falsy" });
+      return null;
+    }
+    return ctx;
+  }
+  function resumeIfSuspended(context) {
+    if (!idleSuspended && context.state !== "suspended") return;
+    try {
+      context.resume();
+    } catch (error) {
+      debug("context.resume.failed", { message: errorMessage(error) });
+    }
+    idleSuspended = false;
+  }
+  function isClipValue(value) {
+    return typeof value === "string" && value !== "";
+  }
+  function resolveClipUrl(event) {
+    if (group && group.clips && Object.prototype.hasOwnProperty.call(group.clips, event)) {
+      const value2 = group.clips[event];
+      return isClipValue(value2) ? value2 : null;
+    }
+    const value = baseClips[event];
+    return isClipValue(value) ? value : null;
+  }
+  function ensureClip(url) {
+    const cached = cache.get(url);
+    if (cached) return cached;
+    const entry = { state: "loading", buffer: null, data: null };
+    cache.set(url, entry);
+    if (typeof fetchClip !== "function") {
+      entry.state = "empty";
+      debug("clip.no_fetcher", { url });
+      return entry;
+    }
+    Promise.resolve().then(() => fetchClip(url)).then((data) => {
+      if (disposed) return;
+      if (data === null || data === void 0) {
+        entry.state = "empty";
+        debug("clip.empty", { url });
+        return;
+      }
+      if (muted) {
+        entry.state = "pending";
+        entry.data = data;
+        return;
+      }
+      decodeEntry(entry, url, data);
+    }).catch((error) => {
+      entry.state = "failed";
+      entry.data = null;
+      debug("clip.decode.failed", { url, message: errorMessage(error) });
+    });
+    return entry;
+  }
+  function decodeEntry(entry, url, data) {
+    const context = ensureContext();
+    if (!context) {
+      entry.state = "failed";
+      entry.data = null;
+      debug("clip.decode.failed", { url, message: "no audio context" });
+      return;
+    }
+    Promise.resolve(context.decodeAudioData(data)).then((buffer) => {
+      entry.state = "ready";
+      entry.buffer = buffer;
+      entry.data = null;
+    }).catch((error) => {
+      entry.state = "failed";
+      entry.data = null;
+      debug("clip.decode.failed", { url, message: errorMessage(error) });
+    });
+  }
+  function bufferDuration(buffer) {
+    const duration = Number(buffer && buffer.duration);
+    return Number.isFinite(duration) && duration > 0 ? duration : 0;
+  }
+  function trackNode(source, gain) {
+    const node = { source, gain };
+    activeNodes.add(node);
+    try {
+      source.onended = () => {
+        activeNodes.delete(node);
+        try {
+          gain.disconnect();
+        } catch {
+        }
+      };
+    } catch {
+    }
+  }
+  function stopActiveNodes() {
+    for (const node of activeNodes) {
+      try {
+        node.source.stop();
+      } catch {
+      }
+      try {
+        node.gain.disconnect();
+      } catch {
+      }
+    }
+    activeNodes.clear();
+  }
+  function playEvent(event, { at = null, ignoreMute = false } = {}) {
+    if (disposed) return null;
+    maybeIdleSuspend();
+    if (muted && !ignoreMute) return null;
+    touch();
+    const url = resolveClipUrl(event);
+    if (!url) return null;
+    const context = ensureContext();
+    if (!context) return null;
+    resumeIfSuspended(context);
+    const entry = ensureClip(url);
+    if (entry.state !== "ready" || !entry.buffer) return null;
+    const volume = resolveVolume(eventVols, globalVol, event);
+    let source = null;
+    let gain = null;
+    try {
+      source = context.createBufferSource();
+      source.buffer = entry.buffer;
+      gain = context.createGain();
+      gain.gain.value = volume;
+      source.connect(gain);
+      gain.connect(context.destination);
+    } catch (error) {
+      debug("node.create.failed", { event, message: errorMessage(error) });
+      return null;
+    }
+    const when = typeof at === "number" && Number.isFinite(at) ? Math.max(context.currentTime, at) : context.currentTime;
+    try {
+      source.start(when);
+    } catch (error) {
+      debug("start.failed", { event, message: errorMessage(error) });
+      return null;
+    }
+    trackNode(source, gain);
+    return { url, when, volume, duration: bufferDuration(entry.buffer) };
+  }
+  function press() {
+    const result = playEvent("press");
+    pressAnchor = result ? { startedAt: result.when, duration: result.duration } : null;
+    return result;
+  }
+  function release() {
+    if (disposed) return null;
+    const anchor = pressAnchor;
+    pressAnchor = null;
+    let at = null;
+    if (anchor && ctx) {
+      at = computeReleaseStart(anchor.startedAt, anchor.duration, ctx.currentTime);
+    }
+    return playEvent("release", { at });
+  }
+  function play(event, options = {}) {
+    return playEvent(event, options);
+  }
+  function preview(event) {
+    return playEvent(event, { ignoreMute: true });
+  }
+  function setVolume(kind, value, { explicit = false } = {}) {
+    if (disposed) return;
+    maybeIdleSuspend();
+    const volume = clampVolume(value);
+    if (volume === null) return;
+    if (kind === "global") {
+      globalVol = volume;
+      return;
+    }
+    if (typeof kind !== "string" || kind === "") return;
+    let slot = eventVols[kind];
+    if (!slot) {
+      slot = { vol: 1, volSet: false };
+      eventVols[kind] = slot;
+    }
+    slot.vol = volume;
+    if (explicit) slot.volSet = true;
+  }
+  function setMuted(value) {
+    if (disposed) return;
+    const nextMuted = !!value;
+    if (nextMuted === muted) return;
+    muted = nextMuted;
+    if (nextMuted) {
+      pressAnchor = null;
+      stopActiveNodes();
+      return;
+    }
+    for (const [url, entry] of cache) {
+      if (entry.state !== "pending") continue;
+      entry.state = "loading";
+      const data = entry.data;
+      entry.data = null;
+      decodeEntry(entry, url, data);
+    }
+  }
+  function setClip(event, url) {
+    if (disposed) return;
+    baseClips[event] = isClipValue(url) ? url : null;
+  }
+  function setClips(map) {
+    if (disposed || !map || typeof map !== "object") return;
+    for (const event of Object.keys(map)) setClip(event, map[event]);
+  }
+  function setSoundGroup(next) {
+    if (disposed) return;
+    if (!next) {
+      group = null;
+      return;
+    }
+    const clips = next.clips && typeof next.clips === "object" ? { ...next.clips } : {};
+    group = { id: typeof next.id === "string" ? next.id : null, clips };
+  }
+  function collectMappedUrls() {
+    const urls = /* @__PURE__ */ new Set();
+    for (const value of Object.values(baseClips)) if (isClipValue(value)) urls.add(value);
+    if (group && group.clips) {
+      for (const value of Object.values(group.clips)) if (isClipValue(value)) urls.add(value);
+    }
+    return Array.from(urls);
+  }
+  function warm(urls = null) {
+    if (disposed || muted) return [];
+    const list = urls === null ? collectMappedUrls() : Array.isArray(urls) ? urls : [urls];
+    const warming = [];
+    for (const url of list) {
+      if (!isClipValue(url)) continue;
+      const entry = ensureClip(url);
+      if (entry.state === "loading") warming.push(url);
+    }
+    return warming;
+  }
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    cancelIdleCheck();
+    pressAnchor = null;
+    stopActiveNodes();
+    ctx = null;
+  }
+  return {
+    press,
+    release,
+    play,
+    preview,
+    setVolume,
+    setMuted,
+    setClip,
+    setClips,
+    setSoundGroup,
+    warm,
+    dispose
+  };
+}
+
 // plugin-src/hermes-whale-widget/desktop/src/main.js
 var ID = "whale-widget";
 var $health = atom3({ state: "checking", version: null, schema_version: null, detail: null });
@@ -1319,9 +1789,11 @@ var HEALTH_POLL_MS = 6e4;
 var WAIT_POLL_MS = 1e4;
 var INGEST_WAIT_EVENT_PATH = "/ingest/wait-event";
 var WAIT_STATE_PATH = "/wait-state";
+var NOTIFICATIONS_PATH = "/notifications";
 var DEFAULT_UI_CONFIG = {
   balance_poll_seconds: 60,
-  usage_summary_poll_seconds: 30
+  usage_summary_poll_seconds: 30,
+  sound: { enabled: false, muted: false, volume_global: 100 }
 };
 var MOOD_EVENTS = /* @__PURE__ */ new Set(["TASK_COMPLETED", "USAGE_UPDATED", "ERROR", "APPROVAL_CLEARED"]);
 var SUBSCRIBED_EVENTS = [
@@ -1379,6 +1851,23 @@ function handleSettledResults(controller, results, batchTurns) {
     }
   }
 }
+function attachSoundEngine(controller, sound = {}) {
+  if (typeof AudioContext !== "function") return null;
+  const engine = createSoundEngine({
+    contextFactory: () => new AudioContext({ latencyHint: "interactive" }),
+    now: () => Date.now(),
+    fetchClip: async (url) => {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      return await res.arrayBuffer();
+    }
+  });
+  engine.setMuted(sound.muted === true);
+  const vol = Number(sound.volume_global);
+  engine.setVolume("global", Number.isFinite(vol) ? vol / 100 : 1, { explicit: true });
+  controller.attachSound(engine);
+  return engine;
+}
 var main_default = {
   id: ID,
   name: "Whale Widget",
@@ -1416,16 +1905,24 @@ var main_default = {
       }
     };
     const pollWaitState = async () => {
-      let waiting = false;
+      let question = false;
+      let approval = false;
       try {
         const data = await ctx.rest(WAIT_STATE_PATH);
-        const slots = data?.slots;
-        waiting = Array.isArray(slots) && slots.length > 0;
+        question = Array.isArray(data?.question_slots) && data.question_slots.length > 0;
+        approval = Array.isArray(data?.approval_slots) && data.approval_slots.length > 0;
       } catch {
-        waiting = false;
+        question = approval = false;
       }
       try {
-        controller.syncWaiting({ question: waiting, approval: waiting });
+        controller.syncWaiting({ question, approval });
+      } catch {
+      }
+    };
+    const pollNotifications = async () => {
+      try {
+        const data = await ctx.rest(NOTIFICATIONS_PATH);
+        controller.syncNotifications(data?.notifications);
       } catch {
       }
     };
@@ -1484,11 +1981,16 @@ var main_default = {
       } catch {
       }
       void pollWaitState();
+      void pollNotifications();
     }, WAIT_POLL_MS);
-    void loadUiConfig((path) => ctx.rest(path)).then(
-      (config) => dataService.start(config),
-      () => dataService.start({ ...DEFAULT_UI_CONFIG })
-    );
+    void loadUiConfig((path) => ctx.rest(path)).then((config) => {
+      dataService.start(config);
+      try {
+        const sound = config?.sound ?? {};
+        if (sound.enabled) attachSoundEngine(controller, sound);
+      } catch {
+      }
+    }, () => dataService.start({ ...DEFAULT_UI_CONFIG }));
     try {
       ctx.onDispose?.(() => {
         clearInterval(timer);

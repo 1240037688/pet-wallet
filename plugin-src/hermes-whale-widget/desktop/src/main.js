@@ -50,6 +50,7 @@ import {
   markReconnected,
 } from './core/turn-tracker.js'
 import { createIngestClient } from './core/ingest-client.js'
+import { createSoundEngine } from './sound/engine.js'
 
 // Re-exported for preview/tests: the pane's whale, bubble and data atoms.
 export { $whale, $bubble }
@@ -67,12 +68,14 @@ const WAIT_POLL_MS = 10_000 // wait-state poll + controller.tick share one timer
 
 const INGEST_WAIT_EVENT_PATH = '/ingest/wait-event'
 const WAIT_STATE_PATH = '/wait-state'
+const NOTIFICATIONS_PATH = '/notifications'
 
 // Mirror of whale_core.config.DEFAULTS (only the keys the JS half consumes).
 // Used when GET /config fails — a dashboard outage must never break the UI.
 const DEFAULT_UI_CONFIG = {
   balance_poll_seconds: 60,
   usage_summary_poll_seconds: 30,
+  sound: { enabled: false, muted: false, volume_global: 100 },
 }
 
 // M6 mood surface: the ONLY normalized events that drive the whale face.
@@ -156,10 +159,33 @@ function handleSettledResults(controller, results, batchTurns) {
   }
 }
 
+/**
+ * M9 wiring (Goal pass P1-1): build the sound sink from config. Inert until
+ * clips exist (setClip/sound groups, M10 assets); a missing AudioContext
+ * (preview/node) or any construction failure keeps the widget fully usable.
+ * Volume input is 0..100 (config scale); the engine clamps 0..1.
+ */
+function attachSoundEngine(controller, sound = {}) {
+  if (typeof AudioContext !== 'function') return null
+  const engine = createSoundEngine({
+    contextFactory: () => new AudioContext({ latencyHint: 'interactive' }),
+    now: () => Date.now(),
+    fetchClip: async (url) => {
+      const res = await fetch(url)
+      if (!res.ok) return null
+      return await res.arrayBuffer()
+    },
+  })
+  engine.setMuted(sound.muted === true)
+  const vol = Number(sound.volume_global)
+  engine.setVolume('global', Number.isFinite(vol) ? vol / 100 : 1, { explicit: true })
+  controller.attachSound(engine)
+  return engine
+}
+
 export default {
   id: ID,
   name: 'Whale Widget',
-
   register(ctx) {
     const normalizer = createNormalizer()
     const tracker = createTurnTracker()
@@ -203,21 +229,36 @@ export default {
       }
     }
 
-    /** M8 wait-state poll: slots present → sticky waiting bubble + mood;
-     *  404/failure → no waiting (WP-2 may not be deployed — defensive). */
+    /** M8 wait-state poll (REAL contract: {question_slots[], approval_slots[],
+     *  fired_dedup_keys[]} — Goal-pass P0-1 fix: the previous `data?.slots`
+     *  read never matched and silently disabled waiting). Slots present →
+     *  sticky waiting bubble + mood; 404/failure → no waiting (defensive). */
     const pollWaitState = async () => {
-      let waiting = false
+      let question = false
+      let approval = false
       try {
         const data = await ctx.rest(WAIT_STATE_PATH)
-        const slots = data?.slots
-        waiting = Array.isArray(slots) && slots.length > 0
+        question = Array.isArray(data?.question_slots) && data.question_slots.length > 0
+        approval = Array.isArray(data?.approval_slots) && data.approval_slots.length > 0
       } catch {
-        waiting = false
+        question = approval = false
       }
       try {
-        controller.syncWaiting({ question: waiting, approval: waiting })
+        controller.syncWaiting({ question, approval })
       } catch {
         /* UI must never break the poll loop */
+      }
+    }
+
+    /** Goal-pass P0-2: rules-engine notifications → bubbles. The wait_*
+     *  kinds are filtered controller-side (wait-state chain owns them);
+     *  endpoint absence (older Python half) is tolerated silently. */
+    const pollNotifications = async () => {
+      try {
+        const data = await ctx.rest(NOTIFICATIONS_PATH)
+        controller.syncNotifications(data?.notifications)
+      } catch {
+        /* no consumer endpoint / transient failure — keep last known bubbles */
       }
     }
 
@@ -291,13 +332,19 @@ export default {
         /* cosmetic */
       }
       void pollWaitState()
+      void pollNotifications()
     }, WAIT_POLL_MS)
 
-    // ── data service: config-driven polling (defaults on /config failure) ───
-    void loadUiConfig((path) => ctx.rest(path)).then(
-      (config) => dataService.start(config),
-      () => dataService.start({ ...DEFAULT_UI_CONFIG }),
-    )
+    // ── data service: config-driven polling + optional sound engine ─────────
+    void loadUiConfig((path) => ctx.rest(path)).then((config) => {
+      dataService.start(config)
+      try {
+        const sound = config?.sound ?? {}
+        if (sound.enabled) attachSoundEngine(controller, sound)
+      } catch {
+        /* audio is cosmetic — never blocks the widget */
+      }
+    }, () => dataService.start({ ...DEFAULT_UI_CONFIG }))
 
     try {
       ctx.onDispose?.(() => {

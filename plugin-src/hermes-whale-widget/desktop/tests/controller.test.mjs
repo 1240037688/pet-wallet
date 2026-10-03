@@ -25,18 +25,16 @@ test('first click opens the greeting sequence; 2nd/3rd taps advance it', () => {
   assert.equal($bubble.get().stepIndex, 2)
 })
 
-test('combo ≥4 queues the idle-line bubble (clickCount reaches the easter-egg zone)', () => {
+test('combo ≥4 dismisses the greeting and surfaces the idle-line (Goal-pass P2-1)', () => {
   const c = createWhaleController()
   c.click()
   c.click()
   c.click()
   assert.equal(c.click(), 4)
   assert.equal($whale.get().clickCount, 4)
-  // Observed queue semantics: idle-line shares the info rank with the still-alive
-  // greeting (re-armed by the advancing taps), and first-inserted wins the tie —
-  // so the greeting stays on screen. The idle-line IS queued behind it; making it
-  // preempt needs a controller/queue tweak (WP-owned files) — flagged in WORKLOG.
-  assert.equal($bubble.get().key, 'greeting')
+  // the greeting (same info rank, re-armed by the advancing taps) is dismissed
+  // first, so the idle-line is actually visible — the WP-1 occlusion fix
+  assert.equal($bubble.get().key, 'idle-line')
 })
 
 test('TASK_COMPLETED → happy mood + task-done bubble', () => {
@@ -143,4 +141,78 @@ test('setData feeds the resolver snapshot (no throw, no bubble side effects)', (
   c.setData({ balanceText: '110.00 CNY', todayText: '4.57 CNY' })
   assert.equal(c._data.balance_text, '110.00 CNY')
   assert.equal($bubble.get(), null)
+})
+
+// ── Goal-pass additions (P0-2 notifications consumer + P1-1 sound sink) ────
+
+test('syncNotifications maps rules-engine items to ranked bubbles (— on missing money)', () => {
+  const c = createWhaleController()
+  c.syncNotifications([
+    {
+      kind: 'balance_low',
+      rank: 2,
+      dedup_key: 'balance_low:fp:2026-10-04',
+      ttl_ms: 0,
+      payload: { observed_balance_units: 0, currency: 'CNY', day: '2026-10-04' },
+    },
+    { kind: 'wait_input', rank: 4, dedup_key: 'wait:question:t1', ttl_ms: 0, payload: {} }, // skipped: wait-state chain owns it
+    { kind: 'bogus', rank: 9, dedup_key: 'x', ttl_ms: 0, payload: {} }, // skipped: unknown kind
+  ])
+  const view = $bubble.get()
+  assert.equal(view.key, 'balance_low:fp:2026-10-04')
+  assert.equal(view.kind, 'balance_low') // rank 2 wins the tie-break vs nothing else queued
+})
+
+test('syncNotifications: recovered standing alert is dismissed (balance_low recovery)', () => {
+  const c = createWhaleController()
+  const item = {
+    kind: 'balance_low', rank: 2, dedup_key: 'balance_low:fp:d1', ttl_ms: 0,
+    payload: { observed_balance_units: 0, currency: 'CNY', day: 'd1' },
+  }
+  c.syncNotifications([item])
+  assert.equal($bubble.get().key, 'balance_low:fp:d1')
+  c.syncNotifications([]) // recovery: server no longer lists it
+  assert.equal($bubble.get(), null)
+})
+
+test('syncNotifications: turn_cost notification carries formatted estimate (est. honesty via def text)', () => {
+  const c = createWhaleController()
+  c.syncNotifications([
+    {
+      kind: 'turn_cost', rank: 3, dedup_key: 'turn:d9', ttl_ms: 5000,
+      payload: { estimated_cost_units: 42_000_000, currency: 'CNY', cost_basis: 'whale_pricing', model: 'm1' },
+    },
+  ])
+  const view = $bubble.get()
+  assert.equal(view.key, 'turn:d9')
+  assert.equal(view.kind, 'turn_cost')
+})
+
+test('syncWaiting first appearance plays question/approval sound once (sound sink hooked)', () => {
+  const c = createWhaleController()
+  const played = []
+  const pressed = []
+  c.attachSound({
+    press: () => pressed.push('press'),
+    release: () => pressed.push('release'),
+    play: (event) => played.push(event),
+  })
+  c.syncWaiting({ question: true, approval: false })
+  c.syncWaiting({ question: true, approval: false }) // sticky re-sync: no repeat
+  assert.deepEqual(played, ['question'])
+  c.syncWaiting({ question: false, approval: true })
+  assert.deepEqual(played, ['question', 'approval'])
+  c.syncWaiting({ question: false, approval: false })
+  assert.deepEqual(played, ['question', 'approval'])
+  c.press()
+  c.release()
+  assert.deepEqual(pressed, ['press', 'release'])
+})
+
+test('TASK_COMPLETED plays task_finished through the sound sink', () => {
+  const c = createWhaleController()
+  const played = []
+  c.attachSound({ play: (event) => played.push(event) })
+  c.event('TASK_COMPLETED')
+  assert.deepEqual(played, ['task_finished'])
 })

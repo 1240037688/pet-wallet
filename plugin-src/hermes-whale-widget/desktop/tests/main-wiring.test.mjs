@@ -30,7 +30,7 @@ function makeCtx({ restImpl } = {}) {
       if (p === '/config') return { balance_poll_seconds: 60, usage_summary_poll_seconds: 30 }
       if (p === '/balance') return { state: 'ok', observed_balance_units: 11_000_000_000, currency: 'CNY', credential: { configured: true } }
       if (p === '/usage/summary') return { estimated_today_units: 456_700_000, turns_today: 12, estimated_today: [{ currency: 'CNY' }] }
-      if (p === '/wait-state') return { slots: [] }
+      if (p === '/wait-state') return { question_slots: [], approval_slots: [], fired_dedup_keys: [] }
       if (p === '/ingest/turn') return { status: 'accepted', accepted: 1, duplicate: 0, settled: SETTLED }
       if (p === '/ingest/wait-event') return { ok: true }
       throw new Error(`unexpected rest path: ${p}`)
@@ -57,6 +57,11 @@ function completeEvent(overrides = {}) {
 }
 
 const settledNow = () => new Promise((resolve) => setImmediate(resolve))
+// async polls (wait-state/notifications) cross several promise hops; a single
+// setImmediate is not deterministic under load — flush a few macrotasks instead
+const flushAsync = async () => {
+  for (let i = 0; i < 8; i++) await new Promise((resolve) => setTimeout(resolve, 0))
+}
 
 test('built artifact exists for the wiring smoke', () => {
   assert.ok(fs.existsSync(ARTIFACT), 'run node tools/build-desktop.mjs first')
@@ -138,7 +143,7 @@ test('ingest response without settled → no bubble, behaviour unchanged', async
       if (p === '/config') return { balance_poll_seconds: 60, usage_summary_poll_seconds: 30 }
       if (p === '/balance') return { state: 'ok', observed_balance_units: 1, credential: {} }
       if (p === '/usage/summary') return { estimated_today_units: null, turns_today: 0 }
-      if (p === '/wait-state') return { slots: [] }
+      if (p === '/wait-state') return { question_slots: [], approval_slots: [], fired_dedup_keys: [] }
       throw new Error(`unexpected rest path: ${p}`)
     },
   })
@@ -190,7 +195,7 @@ test('failing /ingest/wait-event is silent (wait bridge never breaks accounting)
       if (p === '/config') return { balance_poll_seconds: 60, usage_summary_poll_seconds: 30 }
       if (p === '/balance') return { state: 'ok', observed_balance_units: 1, credential: {} }
       if (p === '/usage/summary') return { estimated_today_units: null, turns_today: 0 }
-      if (p === '/wait-state') return { slots: [] }
+      if (p === '/wait-state') return { question_slots: [], approval_slots: [], fired_dedup_keys: [] }
       throw new Error(`unexpected rest path: ${p}`)
     },
   })
@@ -215,7 +220,7 @@ test('wait-state poll: slots → sticky waiting + waiting mood', async (t) => {
   const mod = await import('../plugin.js')
   const { ctx, disposed } = makeCtx({
     restImpl: (p) => {
-      if (p === '/wait-state') return { slots: [{ kind: 'question', tool_id: 't1', session_id: 's9' }] }
+      if (p === '/wait-state') return { question_slots: [{ tool_id: 't1', session_id: 's9', since: 0 }], approval_slots: [], fired_dedup_keys: [] }
       if (p === '/health') return { ok: true, version: '0.1.0', schema_version: 1 }
       if (p === '/config') return { balance_poll_seconds: 60, usage_summary_poll_seconds: 30 }
       if (p === '/balance') return { state: 'ok', observed_balance_units: 1, credential: {} }
@@ -227,13 +232,13 @@ test('wait-state poll: slots → sticky waiting + waiting mood', async (t) => {
   t.after(() => {
     for (const fn of disposed) fn()
   })
-  await settledNow()
+  await flushAsync()
 
   const whale = mod.$whale.get()
   assert.equal(whale.mood, 'waiting')
-  assert.equal(whale.waiting, 'approval') // question+approval both true → approval is the last machine event
+  assert.equal(whale.waiting, 'question') // only a question slot is present (real contract shape)
   const bubble = mod.$bubble.get()
-  assert.ok(['wait:question', 'wait:approval'].includes(bubble?.key))
+  assert.equal(bubble?.key, 'wait:question')
 })
 
 test('wait-state failure (WP-2 not deployed) → treated as no waiting, no crash', async (t) => {
@@ -253,7 +258,7 @@ test('wait-state failure (WP-2 not deployed) → treated as no waiting, no crash
   t.after(() => {
     for (const fn of disposed) fn()
   })
-  await settledNow()
+  await flushAsync()
 
   const whale = mod.$whale.get()
   assert.equal(whale.mood, 'idle')

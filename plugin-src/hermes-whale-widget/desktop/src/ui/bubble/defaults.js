@@ -57,3 +57,34 @@ export const DEFAULT_IDLE_LINES = validateBubble({
     },
   ],
 })
+
+/** Standing alerts (Goal pass P0-2) — persisted server-side, ttl 0. */
+export const DEFAULT_BUDGET_REACHED = validateBubble({
+  v: 1,
+  tapAdvance: false,
+  items: [
+    {
+      kind: 'custom',
+      modules: [
+        { type: 'text', text: '今日预算已达 ⚠', style: { bold: true, color: '#b3261e' } },
+        { type: 'estimated_today', row: 1, style: { bold: true } },
+        { type: 'text', row: 2, text: '（估算值；可在设置中调整预算）', style: { size: 10, color: '#8a93a1' } },
+      ],
+    },
+  ],
+})
+
+export const DEFAULT_BALANCE_LOW = validateBubble({
+  v: 1,
+  tapAdvance: false,
+  items: [
+    {
+      kind: 'custom',
+      modules: [
+        { type: 'text', text: '余额不足 ⚠', style: { bold: true, color: '#b3261e' } },
+        { type: 'balance', row: 1, style: { bold: true } },
+        { type: 'text', row: 2, text: '（API 实测余额；记得充值哦）', style: { size: 10, color: '#8a93a1' } },
+      ],
+    },
+  ],
+})

@@ -62,6 +62,13 @@ DEFAULTS: dict[str, Any] = {
         "enabled": True,
         "turn_cost_ttl_ms": 5000,
     },
+    # Sound (M9; engine exists but no clips ship by default → silent until
+    # the user configures assets; enabled=false keeps the Phase-1 default quiet)
+    "sound": {
+        "enabled": False,
+        "muted": False,
+        "volume_global": 100,
+    },
 }
 
 _lock = threading.Lock()

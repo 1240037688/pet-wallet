@@ -104,3 +104,25 @@ ACC 域覆盖：ACC-01（五类 token/turn_seq/day/双 JSON 留存）✓；ACC-0
 ### 下一阶段
 
 M3 Pricing（`pricing.py` 三级 basis + `money.js` 1e8 定点与 Python 同向量对拍 + `ingest.py` 结算接线 + summary per-model cost 分列）；随后 M4 余额轨②。
+
+## 2026-10-03 — M3 Pricing + M4 DeepSeek 余额轨②（主会话实现；子代理因网络故障中断两次，其 M3 半成品经逐文件核验后采用）
+
+### 交付
+- M3：`whale_core/pricing.py`（三级 cost basis：hermes_estimate > whale_pricing（内置 CNY 价目 + 用户覆盖、最长键匹配、reasoning ⊆ output 不另计费、写价不含）> token_only（unknown_model → NULL 永不为 0））+ REST `GET /pricing`、`PUT /pricing/custom`（校验/清除）。
+- M4：`providers/base.py`（错误分类学 auth/rate_limited/server/bad_response/network/timeout/not_configured）+ `providers/gateway.py`（凭据解析：Hermes `agent.secret_scope.get_secret`〔已核实 agent/secret_scope.py:219〕→ env → credentials.json 兜底；指纹 sha256[:24]；出站 origin 白名单）+ `providers/deepseek.py`（/user/balance、多币种选择 CNY>0→任意非零→CNY→首项、缺失字段=NULL≠0）+ `providers/registry.py`。
+- `balance_ledger.py`：快照幂等（UNIQUE）+ 单调（fetched_at<=last 忽略）、差分（降=observed_spend、升=credit **永不冲销**）、五状态机 unknown/zero/error/stale/ok（API 失败≠0、保留 last known、错误只存 kind+status 于 whale_meta）、观测缺口>10min→partialDay、显式校正（implied usage 公式 + revision 乐观并发 409）；`poller.py`（单实例守护线程、无凭据泊车、reset_runtime 即停、测试经 WHALE_WIDGET_DISABLE_POLLER=1 关闭）。
+- REST：`GET /balance`、`GET /balance/summary`、`POST /balance/refresh`、`POST /balance/adjustment`。
+
+### 测试结果（真实输出）
+- pytest **124 passed**（新增 PRV 全 mock 域：401/403/429/5xx/坏 JSON/缺路径/0 余额/超时；差分 down/up/连续/校正/409/partial/五状态转移；安全：响应与存储无 key、credentials.json 兜底来源）；npm test **49 passed**；build + 双重安全自检 OK。
+
+### 修复与偏差
+- provider 表 `created_at/updated_at NOT NULL` 无默认 → `INSERT OR IGNORE` 静默跳过 → FK 失败（补时间戳修复；教训：OR IGNORE 会吞 NOT NULL 违规）。
+- v2 迁移（诚实 NULL 计价）落地后 M2 时代边界断言全面升级：成本 0 占位→真实计价（acc01=60_020 含 cache 命中价）、daily scope 带 currency（`usage:default:CNY`），重置轮（token_only）独立记 `usage:default:none` scope，两行并存。
+- `daily_summary` 无 correction_log_json 列 → 审计改存 balance_adjustment 表（每校正一行）。
+- check-security.py allowlist 加入 `agent`（附核实理由）。
+- **事故记录**：调试脚本曾直连真实 DeepSeek API 得 401（无损害）；纪律强化——provider 交互必须注入 transport（MockTransport），已写入 AGENTS.md §5。
+- AGENTS.md §5 命令区已回填实际命令。
+
+### 下一阶段
+M5 基础鲸鱼（floating pane SDK 探查 + 透明/置顶边界确认）→ M6 鲸鱼状态。

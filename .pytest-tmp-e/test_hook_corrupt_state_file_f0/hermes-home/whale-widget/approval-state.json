@@ -1,0 +1,10 @@
+{
+  "approvals": [
+    {
+      "id": "webui:s#tc-2",
+      "kind": "approval",
+      "since": 1791048982023,
+      "tool": "tc-2"
+    }
+  ]
+}

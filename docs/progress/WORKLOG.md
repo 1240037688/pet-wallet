@@ -287,3 +287,14 @@ M5 基础鲸鱼（floating pane SDK 探查 + 透明/置顶边界确认）→ M6 
 - 合并回归（主会话）：npm test **185 passed**、pytest **180 passed**、构建+node --check+双重安全自检全部 OK。
 - README 已实现/未实现/已知限制与命令节已回填。
 - 遗留：音效接线、combo≥4 idle-line 同 rank 遮挡（WP-1 观察）、M10-M13。
+
+## 2026-10-04 — Goal Completion 收尾（P0×2/P1×2/P2×2 全部关闭）
+
+- **状态审计**发现两处 P0 级集成断点（两模块各自测试通过但从未真实连接）：
+  1. main.js pollWaitState 读 `data?.slots`，实际契约是 `{question_slots[], approval_slots[]}` → 等待提醒全链路静默失效；
+  2. rules 引擎通知只写表，无 /notifications 端点、无桌面消费者 → 三类提醒永不显示。
+- 修复：wait-state 真实契约 + question/approval 分离；新建 notifications_api.py + 挂载 + 桌面 10s 轮询→泡泡（wait_* 跳过防双显、常驻类恢复自动消除）；M9 音效接线（attachSoundEngine + controller 挂点，config.sound 默认关）；combo≥4 遮挡修复；删除零引用 pricing.js；4 处过时 STUB 头注释改为如实归属。
+- 并行收尾：WP-docs（INSTALL.md 11 节 + USER_FLOW_CHECKLIST 10 流程 + README/catalog 同步）+ WP-e2e（4 场景端到端测试：记账主流程精确到 60_000_000 units、余额预警触发/恢复、等待 open/close/畸形、预算跨日重置）。
+- 最终门禁：node **190**（3 连跑稳定，flake 已用 flushAsync 加固）/ pytest **188** / build + node --check + 双重安全自检全绿。
+- 产出：REMAINING_WORK.md（P0-P3 全部标记 FIXED/VERIFIED/DEFERRED-BY-DESIGN）、FINAL_VALIDATION.md（验收矩阵）、FINAL_GOAL_REPORT.md。
+- **DoD 结论**：环境内可达范围全部达成；真机端到端 NOT VERIFIED（D:\hermes 只读约束），执行路径已备（INSTALL.md + CHECKLIST 人工步骤）。

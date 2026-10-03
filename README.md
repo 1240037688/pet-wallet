@@ -10,8 +10,8 @@ Hermes 桌面「小鲸鱼记账挂件」：AI 用量记账 + 余额/消费展示
 
 ## 项目状态
 
-**MVP（M0–M8）代码闭环完成（2026-10-04）**：usage 捕获→幂等账本→计价→余额差分→鲸鱼浮窗显示→单轮消费泡泡→今日消费→提醒（余额/预算/等待/审批观测）全部落地；音效引擎核心完成（待接线）。测试：pytest 180 / node 185 全绿。
-后续：M9 音效接线、M10 自制素材、M11 多 Provider、M12 设置 UI、M13 打包。
+**MVP（M0–M8）代码闭环 + Goal 收尾完成（2026-10-04）**：usage 捕获→幂等账本→计价→余额差分→鲸鱼浮窗显示→单轮消费泡泡→今日消费→提醒（余额/预算/等待/审批观测）全部落地；音效引擎**已接线**（默认关，无素材时天然无声）；`/notifications` 消费链路与 `/wait-state` 真实契约接线修复完成。测试：pytest 184 / node 190 全绿。部署文档 `INSTALL.md` 与流程清单 `docs/plans/USER_FLOW_CHECKLIST.md` 已交付（真机端到端待用户手动部署验证）。
+后续：M10 自制素材、M11 多 Provider、M12 设置 UI、M13 打包；未完成项总账见 [`docs/plans/REMAINING_WORK.md`](docs/plans/REMAINING_WORK.md)。
 
 ## 环境事实
 
@@ -33,9 +33,10 @@ Hermes 桌面「小鲸鱼记账挂件」：AI 用量记账 + 余额/消费展示
 docs/
   research/    DEEPSEEK_WHALE_ANALYSIS / HERMES_ARCHITECTURE_AUDIT / REFERENCE_PROJECTS / RESEARCH_LOG
   design/      FEATURE_MATRIX / FEASIBILITY_REPORT / ARCHITECTURE_DECISION / DATA_MODEL
-  plans/       IMPLEMENTATION_PLAN / TEST_PLAN
+  plans/       IMPLEMENTATION_PLAN / TEST_PLAN / REMAINING_WORK / USER_FLOW_CHECKLIST
   progress/    WORKLOG / CHANGELOG
 plugin-src/    插件源码（Milestone 0 建立）
+INSTALL.md     安装/启用/凭据/配置项/卸载/回滚指南
 references/    参考项目 clone（gitignore）
 experiments/   一次性脚本（gitignore）
 tools/         开发脚本
@@ -69,16 +70,21 @@ Hermes 会话 usage 联动、设置与持久化。完整可行性分级见 `docs
 **已实现（MVP）**：usage 事件捕获与归一化（幂等去重 + 断线重连对齐）、SQLite 账本（幂等落库/水位/归档）、
 三级计价（hermes_estimate > 价目表 > 诚实 NULL）、DeepSeek 余额轨②（差分记账/五状态机/显式校正 409/观测缺口 partialDay）、
 state.db 只读交叉校验（轨③留桩）、鲸鱼 floating pane（可拖拽，SDK 原生浮卡）、五态情绪状态机、
-泡泡引擎（DSH Row/Module schema 子集 + 加权随机 + avoidIdx + 优先队列）、余额/预算/每轮消费提醒（持久去重）、
-question（clarify 工具事件）与 approval（agent 半体 hook → 状态文件）等待观测、statusbar 芯片、
-Web Audio 音效引擎核心（DSH 语义：同步起播/衔接排期/音量三态/mute）。
+泡泡引擎（DSH Row/Module schema 子集 + 加权随机 + avoidIdx + 优先队列）、余额/预算/每轮消费提醒（持久去重，
+`/notifications` REST + 桌面轮询消费链路）、question（clarify 工具事件 → `/ingest/wait-event`）与
+approval（agent 半体 hook → 状态文件）等待观测（`/wait-state` 真实契约 `{question_slots[], approval_slots[],
+fired_dedup_keys[]}` 两端接线）、statusbar 芯片（●/◐/○/◌ 四态）、
+Web Audio 音效引擎（DSH 语义：同步起播/衔接排期/音量三态/mute；**已接线，默认关**）。
 
-**未实现**：音效引擎 main.js 接线（M9 收尾）、正式鲸鱼素材（M10，DSH 素材不可复用需自制）、
-多 Provider 模板（M11，现仅 DeepSeek）、设置 UI（M12）、打包安装（M13）、独立透明窗口（Phase 2 可选）。
+**未实现**：正式鲸鱼素材与默认音效素材（M10，DSH 素材不可复用需自制——当前为占位 SVG、无声）、
+多 Provider 模板（M11，现仅 DeepSeek）、设置 UI（M12，现走 config.json）、打包发布与 catalog 定稿
+（M13，`INSTALL.md` 已先行交付）、独立透明窗口（Phase 2 可选）。
 
 **已知限制**：估算值与真实观测严格分列（UI 带「估算」角标）；DSH 同分钟同内容两轮的残留风险 R2；
 余额 API 字段时效未自动探测（模板带 unverified 标注）；未计价轮成本显示「—」绝不按 0 计；
-Python 半体启用需重启 App；真机冒烟（事件 payload 实形状/浮窗视觉）待用户部署验证。
+无内置音效素材（`sound.enabled` 开启后素材就位前也无声）；Python 半体启用需重启 App；
+真机端到端冒烟（事件 payload 实形状/浮窗视觉/审批与 clarify 等待链路）待用户部署验证——
+逐条清单见 [`docs/plans/USER_FLOW_CHECKLIST.md`](docs/plans/USER_FLOW_CHECKLIST.md)。
 
 ## 参考项目
 
@@ -93,4 +99,12 @@ Python 半体启用需重启 App；真机冒烟（事件 payload 实形状/浮�
 
 ## 安装 / 卸载 / 回滚 / 数据与配置位置 / 凭据
 
-待架构决策与 Milestone 13（Packaging）后回填本节。凭据将优先走 Hermes 官方机制（调查确认后更新）。
+完整步骤、凭据三方式与全部配置项说明见 **[`INSTALL.md`](INSTALL.md)**。速览：
+
+| 项 | 结论 |
+|---|---|
+| 安装 | 构建产物 `desktop/plugin.js`（`node tools/build-desktop.mjs`）；**用户手动**复制 `plugin-src/hermes-whale-widget/` → `D:\hermes\plugins\whale-widget\` → `config.yaml` 的 `plugins.enabled` 加 `whale-widget` → 重启 App → Plugins 页 opt-in 桌面半体（本项目约束禁止 agent 代写 `D:\hermes`） |
+| 卸载 | Plugins 页禁用 → `plugins.enabled` 移除并重启 → 删插件目录；数据目录默认保留 |
+| 回滚 | `git checkout <版本>` → 重新构建复制；schema 迁移自带 `whale.db.bak-<ver>` 备份 |
+| 数据与配置位置 | `<HERMES_HOME>/whale-widget/`（whale.db / config.json / credentials.json / approval-state.json / logs）——数据与代码分离，绝不写进插件目录 |
+| 凭据 | 三方式按优先级：Hermes secret_scope（env 名 `DEEPSEEK_API_KEY`）→ 进程 env → 数据目录 `credentials.json`（明文兜底，风险已标注）；**绝不把 key 写进 config.json**；REST/日志只暴露指纹 |

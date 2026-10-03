@@ -1,8 +1,8 @@
 """Provider gateway package — credential-aware outbound HTTP for balance APIs.
 
-STUB (M0). base.py/gateway.py arrive in M4 (httpx client with injectable
-transport, 15s timeout, one retry on network/5xx, in-flight dedup; secret
-resolution + fingerprint + outbound origin whitelist + assertSafeApiUrl),
+Implemented in M4: base.py (error taxonomy + injectable httpx transport),
+gateway.py (secret resolution + fingerprint + outbound origin whitelist),
+deepseek.py (first vendor template), registry.py (M11 generalises).
 deepseek.py is the first vendor template (M4), registry.py the user-template
 store (M11).
 """

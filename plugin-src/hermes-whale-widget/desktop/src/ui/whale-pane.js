@@ -93,7 +93,14 @@ function DataCard({ $balance, $summary, $dashboard }) {
   const todayText = tv ? tv.text : '—'
 
   return jsxs('div', {
-    style: { display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 },
+    style: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 8,
+      fontSize: 12.5,
+      fontFamily:
+        '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif',
+    },
     children: [
       jsx('div', {
         style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 },

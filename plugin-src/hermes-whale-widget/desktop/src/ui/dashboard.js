@@ -56,11 +56,11 @@ export const ROUTE_TITLE = 'Whale Wallet'
 
 // Balance tone colors (balance-view.js semantics; moodAccent palette).
 export const TONE_COLORS = {
-  ok: '#2e7d32',
-  zero: '#0891b2',
-  stale: '#6b7280',
-  error: '#d64545',
-  unknown: '#6b7280',
+  ok: 'var(--ui-green)',
+  zero: 'var(--ui-cyan)',
+  stale: 'var(--ui-text-tertiary)',
+  error: 'var(--ui-red)',
+  unknown: 'var(--ui-text-tertiary)',
 }
 
 export function toneColor(tone) {
@@ -70,7 +70,7 @@ export function toneColor(tone) {
 // Statusbar health dot ($health states).
 export const HEALTH_COLORS = {
   ok: TONE_COLORS.ok,
-  degraded: '#e8a13a',
+  degraded: 'var(--ui-orange)',
   unreachable: TONE_COLORS.error,
   checking: TONE_COLORS.unknown,
 }
@@ -285,29 +285,39 @@ function formatTimestamp(ms) {
 // small styled primitives (inline styles — no tailwind in runtime plugins)
 // ---------------------------------------------------------------------------
 
+// Apple-style surface: soft layered shadow, hairline stroke, continuous-feel radius
 const CARD = {
-  borderRadius: 10,
-  border: '1px solid var(--ui-stroke-secondary)',
-  padding: '12px 14px',
+  background: 'var(--ui-bg-card)',
+  border: '1px solid var(--ui-stroke-tertiary)',
+  borderRadius: 16,
+  boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 6px 20px rgba(0,0,0,0.05)',
+  boxSizing: 'border-box',
   display: 'flex',
   flexDirection: 'column',
-  gap: 8,
+  gap: 10,
+  padding: '16px 18px',
 }
+
+// Apple-type system stack — the workspace may render with its own font; the
+// dashboard opts into the platform feel explicitly.
+const FONT_STACK =
+  '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei UI", "Helvetica Neue", sans-serif'
 
 const TH = {
   textAlign: 'left',
   fontSize: 11,
   color: 'var(--ui-text-tertiary)',
-  fontWeight: 500,
-  padding: '4px 8px',
-  borderBottom: '1px solid var(--ui-stroke-secondary)',
+  fontWeight: 600,
+  padding: '6px 10px',
+  borderBottom: '1px solid var(--ui-stroke-tertiary)',
   whiteSpace: 'nowrap',
+  letterSpacing: '0.01em',
 }
 const TD = {
-  fontSize: 12,
+  fontSize: 12.5,
   color: 'var(--ui-text-secondary)',
-  padding: '5px 8px',
-  borderBottom: '1px solid var(--ui-stroke-secondary)',
+  padding: '8px 10px',
+  borderBottom: '1px solid var(--ui-stroke-tertiary)',
   fontVariantNumeric: 'tabular-nums',
   whiteSpace: 'nowrap',
 }
@@ -315,12 +325,13 @@ const TD = {
 function Badge({ text, color }) {
   return jsx('span', {
     style: {
-      fontSize: 10,
-      lineHeight: '16px',
-      padding: '0 6px',
+      fontSize: 11,
+      lineHeight: '18px',
+      padding: '0 8px',
       borderRadius: 999,
-      border: `1px solid ${color}`,
+      background: `color-mix(in srgb, ${color} 12%, transparent)`,
       color,
+      fontWeight: 500,
       whiteSpace: 'nowrap',
     },
     children: text,
@@ -367,7 +378,7 @@ function sectionTitle(text, key = 't') {
   // a bare span: the page column is a flex layout, no wrapper needed
   return jsx('span', {
     key,
-    style: { fontSize: 12, fontWeight: 600, letterSpacing: '0.04em', color: 'var(--ui-text-tertiary)', marginTop: 4 },
+    style: { fontSize: 13, fontWeight: 600, color: 'var(--ui-text-secondary)', margin: '6px 2px -4px' },
     children: text,
   })
 }
@@ -389,7 +400,7 @@ function DataTable({ headers, rows, emptyText }) {
 
 function BalanceCard({ card, onToggle, onRefresh, refreshing }) {
   return jsx('div', {
-    style: { ...CARD, opacity: card.configured ? 1 : 0.75 },
+    style: { ...CARD, opacity: card.configured ? 1 : 0.6 },
     children: [
       jsx('div', {
         key: 'head',
@@ -397,10 +408,10 @@ function BalanceCard({ card, onToggle, onRefresh, refreshing }) {
         children: [
           jsx(StateDot, { tone: card.tone }),
           jsx('span', {
-            style: { fontSize: 13, fontWeight: 600, color: 'var(--ui-text-primary)' },
+            style: { fontSize: 14, fontWeight: 600, color: 'var(--ui-text-primary)' },
             children: card.provider_id,
           }),
-          jsx('span', { style: { fontSize: 11, color: 'var(--ui-text-tertiary)' }, children: card.stateLabel }),
+          jsx('span', { style: { fontSize: 12, color: 'var(--ui-text-tertiary)' }, children: card.stateLabel }),
           jsx('span', { style: { flex: 1 } }),
           card.badge ? jsx(Badge, { text: card.badge, color: toneColor(card.tone) }) : null,
         ],
@@ -409,12 +420,18 @@ function BalanceCard({ card, onToggle, onRefresh, refreshing }) {
         key: 'amount',
         style: { display: 'flex', alignItems: 'baseline', gap: 6 },
         children: jsx('span', {
-          style: { fontSize: 24, fontWeight: 650, color: 'var(--ui-text-primary)', fontVariantNumeric: 'tabular-nums' },
+          style: {
+            fontSize: 28,
+            fontWeight: 600,
+            letterSpacing: '-0.02em',
+            color: 'var(--ui-text-primary)',
+            fontVariantNumeric: 'tabular-nums',
+          },
           children: card.amountText,
         }),
       }),
       card.hint
-        ? jsx('div', { key: 'hint', style: { fontSize: 11, color: 'var(--ui-text-quaternary)' }, children: card.hint })
+        ? jsx('div', { key: 'hint', style: { fontSize: 11.5, color: 'var(--ui-text-tertiary)' }, children: card.hint })
         : null,
       jsx(ToggleRow, {
         key: 'toggle',
@@ -454,7 +471,7 @@ function TodayCard({ view }) {
         key: 'head',
         style: { display: 'flex', alignItems: 'center', gap: 8 },
         children: [
-          jsx('span', { style: { fontSize: 12, color: 'var(--ui-text-tertiary)' }, children: '今日费用' }),
+          jsx('span', { style: { fontSize: 13, color: 'var(--ui-text-tertiary)' }, children: '今日费用' }),
           jsx(EstimateBadge, {}),
         ],
       }),
@@ -463,11 +480,17 @@ function TodayCard({ view }) {
         style: { display: 'flex', alignItems: 'baseline', gap: 6 },
         children: [
           jsx('span', {
-            style: { fontSize: 26, fontWeight: 650, color: 'var(--ui-text-primary)', fontVariantNumeric: 'tabular-nums' },
+            style: {
+              fontSize: 32,
+              fontWeight: 600,
+              letterSpacing: '-0.02em',
+              color: 'var(--ui-text-primary)',
+              fontVariantNumeric: 'tabular-nums',
+            },
             children: view.amountText,
           }),
           view.currency
-            ? jsx('span', { style: { fontSize: 12, color: 'var(--ui-text-tertiary)' }, children: view.currency })
+            ? jsx('span', { style: { fontSize: 13, color: 'var(--ui-text-tertiary)' }, children: view.currency })
             : null,
         ],
       }),
@@ -477,19 +500,23 @@ function TodayCard({ view }) {
       view.unpriced > 0
         ? jsx('div', {
             key: 'unpriced',
-            style: { fontSize: 11, color: '#e8a13a' },
+            style: { fontSize: 11.5, color: 'var(--ui-orange)' },
             children: `另有 ${view.unpriced} 轮未计价（未知模型或价目缺失）`,
           })
         : null,
       jsx('div', {
         key: 'metrics',
-        style: { display: 'flex', flexWrap: 'wrap', gap: '4px 14px', marginTop: 2 },
+        style: { display: 'flex', flexWrap: 'wrap', gap: '6px 18px', marginTop: 4 },
         children: metrics.map(([label, value]) =>
-          jsx('span', { key: label, style: { fontSize: 11, color: 'var(--ui-text-tertiary)' }, children: [
+          jsx('span', { key: label, style: { fontSize: 11.5, color: 'var(--ui-text-tertiary)' }, children: [
             `${label} `,
             jsx('span', {
               key: 'v',
-              style: { color: 'var(--ui-text-secondary)', fontVariantNumeric: 'tabular-nums' },
+              style: {
+                color: 'var(--ui-text-secondary)',
+                fontWeight: 500,
+                fontVariantNumeric: 'tabular-nums',
+              },
               children: value ?? '—',
             }),
           ] }),
@@ -504,14 +531,14 @@ function ChartCard({ bars, days, onDaysChange, refreshing }) {
     jsx('div', {
       key: bar.index,
       title: bar.title,
-      style: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 0 },
+      style: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 0 },
       children: [
         jsx('div', {
           key: 'track',
           style: {
             width: '100%',
-            maxWidth: 36,
-            height: 120,
+            maxWidth: 34,
+            height: 140,
             display: 'flex',
             alignItems: 'flex-end',
             justifyContent: 'center',
@@ -521,9 +548,11 @@ function ChartCard({ bars, days, onDaysChange, refreshing }) {
               width: '100%',
               height: `${bar.height}%`,
               minHeight: bar.hasValue ? 2 : 1,
-              borderRadius: 3,
-              background: bar.hasValue ? 'var(--ui-accent)' : 'var(--ui-stroke-secondary)',
-              opacity: bar.hasValue ? 0.85 : 0.6,
+              borderRadius: '6px 6px 3px 3px',
+              background: bar.hasValue
+                ? 'linear-gradient(180deg, var(--ui-accent) 0%, color-mix(in srgb, var(--ui-accent) 72%, transparent) 100%)'
+                : 'var(--ui-stroke-secondary)',
+              opacity: bar.hasValue ? 0.92 : 0.6,
               ...(bar.tokenOnly
                 ? { backgroundImage: 'repeating-linear-gradient(135deg, transparent 0 3px, rgba(127,127,127,0.35) 3px 5px)' }
                 : {}),
@@ -532,7 +561,7 @@ function ChartCard({ bars, days, onDaysChange, refreshing }) {
         }),
         jsx('span', {
           key: 'label',
-          style: { fontSize: 10, color: 'var(--ui-text-quaternary)', whiteSpace: 'nowrap' },
+          style: { fontSize: 10.5, color: 'var(--ui-text-tertiary)', whiteSpace: 'nowrap' },
           children: formatDayLabel(bar.day),
         }),
       ],
@@ -571,10 +600,10 @@ function ChartCard({ bars, days, onDaysChange, refreshing }) {
       refreshing
         ? jsx('div', { key: 'refreshing', style: { fontSize: 11, color: 'var(--ui-text-quaternary)' }, children: '刷新中…' })
         : null,
-      jsx('div', { key: 'bars', style: { display: 'flex', alignItems: 'flex-end', gap: 6 }, children: barRows }),
+      jsx('div', { key: 'bars', style: { display: 'flex', alignItems: 'flex-end', gap: 10, paddingTop: 6, borderBottom: '1px solid var(--ui-stroke-tertiary)', paddingBottom: 2 }, children: barRows }),
       jsx('div', {
         key: 'note',
-        style: { fontSize: 10, color: 'var(--ui-text-quaternary)' },
+        style: { fontSize: 11, color: 'var(--ui-text-tertiary)' },
         children: '虚纹柱 = 仅 token 估算（当日无成交价快照）；悬停查看数值。',
       }),
     ],
@@ -642,9 +671,9 @@ function TurnsTable({ turns }) {
           style: TD,
           children:
             turn.status === 'final'
-              ? jsx('span', { style: { color: TONE_COLORS.ok, fontSize: 11 }, children: 'final 最终' })
+              ? jsx('span', { style: { color: TONE_COLORS.ok, fontSize: 11.5, fontWeight: 500 }, children: 'final 最终' })
               : turn.status === 'provisional'
-                ? jsx('span', { style: { color: '#e8a13a', fontSize: 11 }, children: 'provisional 临时' })
+                ? jsx('span', { style: { color: 'var(--ui-orange)', fontSize: 11.5, fontWeight: 500 }, children: 'provisional 临时' })
                 : String(turn.status ?? '—'),
         }),
       ],
@@ -713,7 +742,7 @@ function PricingTables({ pricing }) {
         key: 'notes',
         style: { display: 'flex', flexDirection: 'column', gap: 2 },
         children: (Array.isArray(pricing.notes) ? pricing.notes : []).map((note, index) =>
-          jsx('div', { key: index, style: { fontSize: 10, color: 'var(--ui-text-quaternary)' }, children: `· ${note}` }),
+          jsx('div', { key: index, style: { fontSize: 11, color: 'var(--ui-text-tertiary)' }, children: `· ${note}` }),
         ),
       }),
     ],
@@ -824,10 +853,15 @@ function DashboardPage({ deps }) {
   sections.push(
     jsx('div', {
       key: 'header',
-      style: { display: 'flex', alignItems: 'center', gap: 10 },
+      style: { display: 'flex', alignItems: 'center', gap: 12, margin: '2px 2px 0' },
       children: [
         jsx('span', {
-          style: { fontSize: 15, fontWeight: 650, color: 'var(--ui-text-primary)' },
+          style: {
+            fontSize: 24,
+            fontWeight: 700,
+            letterSpacing: '-0.02em',
+            color: 'var(--ui-text-primary)',
+          },
           children: '🐋 Whale Wallet 用量',
         }),
         jsx(HealthDot, { health }),
@@ -882,7 +916,7 @@ function DashboardPage({ deps }) {
     sections.push(
       jsx('div', {
         key: 'bubble-hint',
-        style: { fontSize: 10, color: 'var(--ui-text-quaternary)' },
+        style: { fontSize: 11, color: 'var(--ui-text-tertiary)' },
         children: `泡泡显示规则：${selected.length === 0 ? '未选择 = 显示全部已配置 Provider' : `仅显示 ${selected.join('、')}`}（写入配置 bubble.balance_providers）`,
       }),
     )
@@ -969,9 +1003,15 @@ function DashboardPage({ deps }) {
 
   return jsx('div', {
     className: 'whale-widget-dashboard',
-    style: { height: '100%', overflowY: 'auto', boxSizing: 'border-box', padding: '16px 20px 28px' },
+    style: {
+      height: '100%',
+      overflowY: 'auto',
+      boxSizing: 'border-box',
+      padding: '24px 28px 44px',
+      fontFamily: FONT_STACK,
+    },
     children: jsx('div', {
-      style: { maxWidth: 860, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 },
+      style: { maxWidth: 920, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 },
       children: sections,
     }),
   })

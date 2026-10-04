@@ -873,7 +873,13 @@ function DataCard({ $balance: $balance2, $summary: $summary2, $dashboard: $dashb
   const tv = unreachable ? salvageView(null) : todayView(summary);
   const todayText = tv ? tv.text : "\u2014";
   return jsxs2("div", {
-    style: { display: "flex", flexDirection: "column", gap: 6, fontSize: 12 },
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: 8,
+      fontSize: 12.5,
+      fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif'
+    },
     children: [
       jsx3("div", {
         style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 },
@@ -2073,18 +2079,18 @@ import { jsx as jsx4 } from "react/jsx-runtime";
 var ROUTE_PATH = "/whale";
 var ROUTE_TITLE = "Whale Wallet";
 var TONE_COLORS = {
-  ok: "#2e7d32",
-  zero: "#0891b2",
-  stale: "#6b7280",
-  error: "#d64545",
-  unknown: "#6b7280"
+  ok: "var(--ui-green)",
+  zero: "var(--ui-cyan)",
+  stale: "var(--ui-text-tertiary)",
+  error: "var(--ui-red)",
+  unknown: "var(--ui-text-tertiary)"
 };
 function toneColor2(tone) {
   return TONE_COLORS[tone] ?? TONE_COLORS.unknown;
 }
 var HEALTH_COLORS = {
   ok: TONE_COLORS.ok,
-  degraded: "#e8a13a",
+  degraded: "var(--ui-orange)",
   unreachable: TONE_COLORS.error,
   checking: TONE_COLORS.unknown
 };
@@ -2257,39 +2263,45 @@ function formatTimestamp(ms) {
   return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 var CARD = {
-  borderRadius: 10,
-  border: "1px solid var(--ui-stroke-secondary)",
-  padding: "12px 14px",
+  background: "var(--ui-bg-card)",
+  border: "1px solid var(--ui-stroke-tertiary)",
+  borderRadius: 16,
+  boxShadow: "0 1px 2px rgba(0,0,0,0.04), 0 6px 20px rgba(0,0,0,0.05)",
+  boxSizing: "border-box",
   display: "flex",
   flexDirection: "column",
-  gap: 8
+  gap: 10,
+  padding: "16px 18px"
 };
+var FONT_STACK = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei UI", "Helvetica Neue", sans-serif';
 var TH = {
   textAlign: "left",
   fontSize: 11,
   color: "var(--ui-text-tertiary)",
-  fontWeight: 500,
-  padding: "4px 8px",
-  borderBottom: "1px solid var(--ui-stroke-secondary)",
-  whiteSpace: "nowrap"
+  fontWeight: 600,
+  padding: "6px 10px",
+  borderBottom: "1px solid var(--ui-stroke-tertiary)",
+  whiteSpace: "nowrap",
+  letterSpacing: "0.01em"
 };
 var TD = {
-  fontSize: 12,
+  fontSize: 12.5,
   color: "var(--ui-text-secondary)",
-  padding: "5px 8px",
-  borderBottom: "1px solid var(--ui-stroke-secondary)",
+  padding: "8px 10px",
+  borderBottom: "1px solid var(--ui-stroke-tertiary)",
   fontVariantNumeric: "tabular-nums",
   whiteSpace: "nowrap"
 };
 function Badge({ text, color }) {
   return jsx4("span", {
     style: {
-      fontSize: 10,
-      lineHeight: "16px",
-      padding: "0 6px",
+      fontSize: 11,
+      lineHeight: "18px",
+      padding: "0 8px",
       borderRadius: 999,
-      border: `1px solid ${color}`,
+      background: `color-mix(in srgb, ${color} 12%, transparent)`,
       color,
+      fontWeight: 500,
       whiteSpace: "nowrap"
     },
     children: text
@@ -2324,7 +2336,7 @@ function HealthDot({ health }) {
 function sectionTitle(text, key = "t") {
   return jsx4("span", {
     key,
-    style: { fontSize: 12, fontWeight: 600, letterSpacing: "0.04em", color: "var(--ui-text-tertiary)", marginTop: 4 },
+    style: { fontSize: 13, fontWeight: 600, color: "var(--ui-text-secondary)", margin: "6px 2px -4px" },
     children: text
   });
 }
@@ -2340,7 +2352,7 @@ function DataTable({ headers, rows, emptyText }) {
 }
 function BalanceCard({ card, onToggle, onRefresh, refreshing }) {
   return jsx4("div", {
-    style: { ...CARD, opacity: card.configured ? 1 : 0.75 },
+    style: { ...CARD, opacity: card.configured ? 1 : 0.6 },
     children: [
       jsx4("div", {
         key: "head",
@@ -2348,10 +2360,10 @@ function BalanceCard({ card, onToggle, onRefresh, refreshing }) {
         children: [
           jsx4(StateDot, { tone: card.tone }),
           jsx4("span", {
-            style: { fontSize: 13, fontWeight: 600, color: "var(--ui-text-primary)" },
+            style: { fontSize: 14, fontWeight: 600, color: "var(--ui-text-primary)" },
             children: card.provider_id
           }),
-          jsx4("span", { style: { fontSize: 11, color: "var(--ui-text-tertiary)" }, children: card.stateLabel }),
+          jsx4("span", { style: { fontSize: 12, color: "var(--ui-text-tertiary)" }, children: card.stateLabel }),
           jsx4("span", { style: { flex: 1 } }),
           card.badge ? jsx4(Badge, { text: card.badge, color: toneColor2(card.tone) }) : null
         ]
@@ -2360,11 +2372,17 @@ function BalanceCard({ card, onToggle, onRefresh, refreshing }) {
         key: "amount",
         style: { display: "flex", alignItems: "baseline", gap: 6 },
         children: jsx4("span", {
-          style: { fontSize: 24, fontWeight: 650, color: "var(--ui-text-primary)", fontVariantNumeric: "tabular-nums" },
+          style: {
+            fontSize: 28,
+            fontWeight: 600,
+            letterSpacing: "-0.02em",
+            color: "var(--ui-text-primary)",
+            fontVariantNumeric: "tabular-nums"
+          },
           children: card.amountText
         })
       }),
-      card.hint ? jsx4("div", { key: "hint", style: { fontSize: 11, color: "var(--ui-text-quaternary)" }, children: card.hint }) : null,
+      card.hint ? jsx4("div", { key: "hint", style: { fontSize: 11.5, color: "var(--ui-text-tertiary)" }, children: card.hint }) : null,
       jsx4(ToggleRow, {
         key: "toggle",
         label: "\u6CE1\u6CE1\u663E\u793A\u4F59\u989D",
@@ -2402,7 +2420,7 @@ function TodayCard({ view }) {
         key: "head",
         style: { display: "flex", alignItems: "center", gap: 8 },
         children: [
-          jsx4("span", { style: { fontSize: 12, color: "var(--ui-text-tertiary)" }, children: "\u4ECA\u65E5\u8D39\u7528" }),
+          jsx4("span", { style: { fontSize: 13, color: "var(--ui-text-tertiary)" }, children: "\u4ECA\u65E5\u8D39\u7528" }),
           jsx4(EstimateBadge, {})
         ]
       }),
@@ -2411,27 +2429,37 @@ function TodayCard({ view }) {
         style: { display: "flex", alignItems: "baseline", gap: 6 },
         children: [
           jsx4("span", {
-            style: { fontSize: 26, fontWeight: 650, color: "var(--ui-text-primary)", fontVariantNumeric: "tabular-nums" },
+            style: {
+              fontSize: 32,
+              fontWeight: 600,
+              letterSpacing: "-0.02em",
+              color: "var(--ui-text-primary)",
+              fontVariantNumeric: "tabular-nums"
+            },
             children: view.amountText
           }),
-          view.currency ? jsx4("span", { style: { fontSize: 12, color: "var(--ui-text-tertiary)" }, children: view.currency }) : null
+          view.currency ? jsx4("span", { style: { fontSize: 13, color: "var(--ui-text-tertiary)" }, children: view.currency }) : null
         ]
       }),
       view.basisText ? jsx4("div", { key: "basis", style: { fontSize: 11, color: "var(--ui-text-quaternary)" }, children: view.basisText }) : null,
       view.unpriced > 0 ? jsx4("div", {
         key: "unpriced",
-        style: { fontSize: 11, color: "#e8a13a" },
+        style: { fontSize: 11.5, color: "var(--ui-orange)" },
         children: `\u53E6\u6709 ${view.unpriced} \u8F6E\u672A\u8BA1\u4EF7\uFF08\u672A\u77E5\u6A21\u578B\u6216\u4EF7\u76EE\u7F3A\u5931\uFF09`
       }) : null,
       jsx4("div", {
         key: "metrics",
-        style: { display: "flex", flexWrap: "wrap", gap: "4px 14px", marginTop: 2 },
+        style: { display: "flex", flexWrap: "wrap", gap: "6px 18px", marginTop: 4 },
         children: metrics.map(
-          ([label, value]) => jsx4("span", { key: label, style: { fontSize: 11, color: "var(--ui-text-tertiary)" }, children: [
+          ([label, value]) => jsx4("span", { key: label, style: { fontSize: 11.5, color: "var(--ui-text-tertiary)" }, children: [
             `${label} `,
             jsx4("span", {
               key: "v",
-              style: { color: "var(--ui-text-secondary)", fontVariantNumeric: "tabular-nums" },
+              style: {
+                color: "var(--ui-text-secondary)",
+                fontWeight: 500,
+                fontVariantNumeric: "tabular-nums"
+              },
               children: value ?? "\u2014"
             })
           ] })
@@ -2445,14 +2473,14 @@ function ChartCard({ bars, days, onDaysChange, refreshing }) {
     (bar) => jsx4("div", {
       key: bar.index,
       title: bar.title,
-      style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 0 },
+      style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 0 },
       children: [
         jsx4("div", {
           key: "track",
           style: {
             width: "100%",
-            maxWidth: 36,
-            height: 120,
+            maxWidth: 34,
+            height: 140,
             display: "flex",
             alignItems: "flex-end",
             justifyContent: "center"
@@ -2462,16 +2490,16 @@ function ChartCard({ bars, days, onDaysChange, refreshing }) {
               width: "100%",
               height: `${bar.height}%`,
               minHeight: bar.hasValue ? 2 : 1,
-              borderRadius: 3,
-              background: bar.hasValue ? "var(--ui-accent)" : "var(--ui-stroke-secondary)",
-              opacity: bar.hasValue ? 0.85 : 0.6,
+              borderRadius: "6px 6px 3px 3px",
+              background: bar.hasValue ? "linear-gradient(180deg, var(--ui-accent) 0%, color-mix(in srgb, var(--ui-accent) 72%, transparent) 100%)" : "var(--ui-stroke-secondary)",
+              opacity: bar.hasValue ? 0.92 : 0.6,
               ...bar.tokenOnly ? { backgroundImage: "repeating-linear-gradient(135deg, transparent 0 3px, rgba(127,127,127,0.35) 3px 5px)" } : {}
             }
           })
         }),
         jsx4("span", {
           key: "label",
-          style: { fontSize: 10, color: "var(--ui-text-quaternary)", whiteSpace: "nowrap" },
+          style: { fontSize: 10.5, color: "var(--ui-text-tertiary)", whiteSpace: "nowrap" },
           children: formatDayLabel(bar.day)
         })
       ]
@@ -2508,10 +2536,10 @@ function ChartCard({ bars, days, onDaysChange, refreshing }) {
         ]
       }),
       refreshing ? jsx4("div", { key: "refreshing", style: { fontSize: 11, color: "var(--ui-text-quaternary)" }, children: "\u5237\u65B0\u4E2D\u2026" }) : null,
-      jsx4("div", { key: "bars", style: { display: "flex", alignItems: "flex-end", gap: 6 }, children: barRows }),
+      jsx4("div", { key: "bars", style: { display: "flex", alignItems: "flex-end", gap: 10, paddingTop: 6, borderBottom: "1px solid var(--ui-stroke-tertiary)", paddingBottom: 2 }, children: barRows }),
       jsx4("div", {
         key: "note",
-        style: { fontSize: 10, color: "var(--ui-text-quaternary)" },
+        style: { fontSize: 11, color: "var(--ui-text-tertiary)" },
         children: "\u865A\u7EB9\u67F1 = \u4EC5 token \u4F30\u7B97\uFF08\u5F53\u65E5\u65E0\u6210\u4EA4\u4EF7\u5FEB\u7167\uFF09\uFF1B\u60AC\u505C\u67E5\u770B\u6570\u503C\u3002"
       })
     ]
@@ -2569,7 +2597,7 @@ function TurnsTable({ turns }) {
         }),
         jsx4("td", {
           style: TD,
-          children: turn.status === "final" ? jsx4("span", { style: { color: TONE_COLORS.ok, fontSize: 11 }, children: "final \u6700\u7EC8" }) : turn.status === "provisional" ? jsx4("span", { style: { color: "#e8a13a", fontSize: 11 }, children: "provisional \u4E34\u65F6" }) : String(turn.status ?? "\u2014")
+          children: turn.status === "final" ? jsx4("span", { style: { color: TONE_COLORS.ok, fontSize: 11.5, fontWeight: 500 }, children: "final \u6700\u7EC8" }) : turn.status === "provisional" ? jsx4("span", { style: { color: "var(--ui-orange)", fontSize: 11.5, fontWeight: 500 }, children: "provisional \u4E34\u65F6" }) : String(turn.status ?? "\u2014")
         })
       ]
     })
@@ -2631,7 +2659,7 @@ function PricingTables({ pricing }) {
         key: "notes",
         style: { display: "flex", flexDirection: "column", gap: 2 },
         children: (Array.isArray(pricing.notes) ? pricing.notes : []).map(
-          (note, index) => jsx4("div", { key: index, style: { fontSize: 10, color: "var(--ui-text-quaternary)" }, children: `\xB7 ${note}` })
+          (note, index) => jsx4("div", { key: index, style: { fontSize: 11, color: "var(--ui-text-tertiary)" }, children: `\xB7 ${note}` })
         )
       })
     ]
@@ -2720,10 +2748,15 @@ function DashboardPage({ deps }) {
   sections.push(
     jsx4("div", {
       key: "header",
-      style: { display: "flex", alignItems: "center", gap: 10 },
+      style: { display: "flex", alignItems: "center", gap: 12, margin: "2px 2px 0" },
       children: [
         jsx4("span", {
-          style: { fontSize: 15, fontWeight: 650, color: "var(--ui-text-primary)" },
+          style: {
+            fontSize: 24,
+            fontWeight: 700,
+            letterSpacing: "-0.02em",
+            color: "var(--ui-text-primary)"
+          },
           children: "\u{1F40B} Whale Wallet \u7528\u91CF"
         }),
         jsx4(HealthDot, { health }),
@@ -2777,7 +2810,7 @@ function DashboardPage({ deps }) {
     sections.push(
       jsx4("div", {
         key: "bubble-hint",
-        style: { fontSize: 10, color: "var(--ui-text-quaternary)" },
+        style: { fontSize: 11, color: "var(--ui-text-tertiary)" },
         children: `\u6CE1\u6CE1\u663E\u793A\u89C4\u5219\uFF1A${selected.length === 0 ? "\u672A\u9009\u62E9 = \u663E\u793A\u5168\u90E8\u5DF2\u914D\u7F6E Provider" : `\u4EC5\u663E\u793A ${selected.join("\u3001")}`}\uFF08\u5199\u5165\u914D\u7F6E bubble.balance_providers\uFF09`
       })
     );
@@ -2857,9 +2890,15 @@ function DashboardPage({ deps }) {
   }
   return jsx4("div", {
     className: "whale-widget-dashboard",
-    style: { height: "100%", overflowY: "auto", boxSizing: "border-box", padding: "16px 20px 28px" },
+    style: {
+      height: "100%",
+      overflowY: "auto",
+      boxSizing: "border-box",
+      padding: "24px 28px 44px",
+      fontFamily: FONT_STACK
+    },
     children: jsx4("div", {
-      style: { maxWidth: 860, margin: "0 auto", display: "flex", flexDirection: "column", gap: 12 },
+      style: { maxWidth: 920, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 },
       children: sections
     })
   });

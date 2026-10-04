@@ -362,3 +362,22 @@ assets/whale-pet-pack/（构建产物） ──用户复制──► D:\hermes\p
 1. 真机宠物装载：复制皮肤包 → 图库选择 whale → 桌面出现鲸鱼（**NOT VERIFIED**，待用户执行，INSTALL.md §12）。
 2. 管家面板去角色化后的视觉验收（desktop/src 改动由并行工程师落地后）。
 3. upstream Hermes Pet API 提案跟进（FEASIBILITY_REPORT §3.1）；采纳前宠物泡泡文字不可注入，维持并列摆位。
+
+
+---
+
+## §12 修订 2026-10-05：交互面宠物本体化（DR-16，修订 DR-15 的面板定位）
+
+**用户决策**：交互必须直接发生在 Hermes 内置宠物本体上（点击宠物 → 泡泡/数据/音效），而不是旁边挂一个独立面板；无论用户装备哪种宠物皮肤都要生效。
+
+**事实依据**（docs/research/HERMES_PET_SYSTEM.md）：SDK 对宠物零导出；`react-dom` 不在运行时 import 白名单（sdk/runtime.ts:61-67）；窗口内宠物渲染为 `<canvas aria-label="… pet">` + position:fixed 容器（floating-pet.tsx:467-481），核心自带拖拽。
+
+**DR-16**：新增**宠物交互层**（`desktop/src/ui/pet-layer.js`，原生 DOM）：
+- 定位锚 = 官方无障碍属性 `canvas[aria-label$=" pet"]`（跨皮肤通用；仅作几何锚点，**绝不解析 UI 文本推断状态**——状态仍来自 gateway 事件/REST）；
+- 捕获阶段指针监听 + tap/拖拽判定（slop 6px）→ 点击宠物 = controller.click()（泡泡序列/音效），拖拽完全留给核心；
+- 泡泡宿主 = body 下的 fixed 层（pointer-events 仅泡泡本体），rAF 跟随宠物游走/拖动，视口钳制、无空间时翻转到下方；
+- nanostores atom 直接订阅（无 React）。
+
+**DR-15 面板降级**：管家 floating pane 改为可选（`config.pane.enabled`，默认 false）——宠物本体是主交互面，面板退为需要常驻数据卡时的 opt-in。皮肤包（DR-15）保持不变：换任何皮肤（含 petdex 商店/AI 生成）交互层均生效。
+
+**已知边界**：弹出式宠物 overlay 是独立 OS 窗口，插件 JS 不在其中加载 → 弹出态的点击交互不可用（upstream `host.pet.*` 提案的正当时机）。

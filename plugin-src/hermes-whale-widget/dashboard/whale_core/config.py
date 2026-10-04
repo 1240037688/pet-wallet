@@ -69,6 +69,11 @@ DEFAULTS: dict[str, Any] = {
         "muted": False,
         "volume_global": 100,
     },
+    # Butler pane (DR-16: the built-in pet is the PRIMARY surface — pet click →
+    # bubbles/sounds; the floating pane is opt-in for a permanent data card)
+    "pane": {
+        "enabled": False,
+    },
 }
 
 _lock = threading.Lock()

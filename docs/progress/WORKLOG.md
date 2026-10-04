@@ -355,3 +355,11 @@ M5 基础鲸鱼（floating pane SDK 探查 + 透明/置顶边界确认）→ M6 
 - **WP-ui（子代理）**：desktop 去角色化——whale-actor.js 退役，floating pane 改造为「🐋 鲸鱼管家」面板（泡泡层+数据卡+音效+mood 强调色 moodAccent()）；node **195** passed。
 - **WP-docs（子代理）**：ARCHITECTURE_DECISION DR-15 修订（候选比较+组件图+用户数据定性）、FEASIBILITY upstream 提案（host.pet.say/react/setActivity/getBounds）、INSTALL §12 宠物皮肤节、README/REMAINING_WORK 同步。
 - **门禁**：node 195 / pytest 188 / build + 双重安全自检全绿。真机宠物装载 NOT VERIFIED（待用户复制皮肤包并选择）。
+
+## 2026-10-05 — DR-16：宠物本体交互层（点击内置宠物 → 鲸鱼挂件交互）
+
+- 用户纠偏：交互必须长在宠物本体上，不要分离面板。调研补强：PetSprite 为 `<canvas aria-label="… pet">`（官方 a11y 属性 = 稳定跨皮肤定位锚）；react-dom 不在 import map → 原生 DOM 层 + nanostores 直订阅。
+- 交付 `desktop/src/ui/pet-layer.js`：捕获阶段 pointer 监听（tap/拖拽 slop=6px 判定，拖拽留给核心）+ `canvas[aria-label$=" pet"]` 定位器 + 跟随宠物（游走/拖动 rAF）的泡泡宿主（视口钳制、下方翻转）；点击宠物 = controller.click()（泡泡序列+音效），bubble 本体可点继续步进。
+- 管家面板降级为可选：config.pane.enabled（默认 false）时才注册；$balance/$summary 订阅喂 resolver 占位数据（两渲染面共用）。
+- 门禁：node **205**（+10：tap 判定/命中/放置/定位器/样式映射）/ pytest 188 / build + 双重安全自检全绿。
+- 边界：弹出态宠物 overlay（独立窗口）不可交互——upstream host.pet.* 提案的正当时机。

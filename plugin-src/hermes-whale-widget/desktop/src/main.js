@@ -58,6 +58,8 @@ import {
 } from './core/turn-tracker.js'
 import { createIngestClient } from './core/ingest-client.js'
 import { createSoundEngine } from './sound/engine.js'
+import { createPetLayer } from './ui/pet-layer.js'
+import { createResolver } from './ui/bubble/resolver.js'
 
 // Re-exported for preview/tests: the pane's whale, bubble and data atoms.
 export { $whale, $bubble }
@@ -345,13 +347,57 @@ export default {
     }, WAIT_POLL_MS)
 
     // ── data service: config-driven polling + optional sound engine ─────────
+    // display data feed for resolver placeholders (— semantics resolver-side):
+    // atoms expose .subscribe without React (nanostores), consumed by both the
+    // optional pane and the pet interaction layer.
+    const syncDisplayData = () => {
+      try {
+        const bal = $balance.get?.() ?? null
+        const sum = $summary.get?.() ?? null
+        controller.setData({
+          balanceText: bal?.observed_balance_units != null
+            ? formatMoney(bal.observed_balance_units, { currency: bal.currency ?? undefined })
+            : null,
+          todayText: sum?.estimated_today_units != null
+            ? formatMoney(sum.estimated_today_units, { currency: 'CNY' })
+            : null,
+          estimatedTodayText: sum?.estimated_today_units != null
+            ? formatMoney(sum.estimated_today_units, { currency: 'CNY' })
+            : null,
+        })
+      } catch {
+        /* display data is cosmetic */
+      }
+    }
+    try {
+      $balance.subscribe?.(syncDisplayData)
+      $summary.subscribe?.(syncDisplayData)
+    } catch { /* shim atoms without subscribe */ }
+    syncDisplayData()
+
+    // ── DR-16 pet interaction layer: click the BUILT-IN pet → whale widget ──
+    // bubbles/sounds attach to the mascot itself; works with ANY equipped skin
+    // (locator = the official a11y `canvas[aria-label$=" pet"]`). Raw DOM —
+    // react-dom is not in the runtime import map.
+    const petLayer = createPetLayer({
+      controller,
+      $bubble,
+      doc: typeof document !== 'undefined' ? document : null,
+      resolve: createResolver(),
+      raf: typeof requestAnimationFrame === 'function' ? (fn) => requestAnimationFrame(fn) : null,
+    })
+    petLayer.start()
+
     void loadUiConfig((path) => ctx.rest(path)).then((config) => {
       dataService.start(config)
       try {
         const sound = config?.sound ?? {}
         if (sound.enabled) attachSoundEngine(controller, sound)
+        // the butler PANE is now OPTIONAL (DR-16: the pet is the surface);
+        // opt back in via config.json { "pane": { "enabled": true } }
+        if (config?.pane?.enabled === true) registerPane()
       } catch {
-        /* audio is cosmetic — never blocks the widget */
+        /* audio/pane are cosmetic — never block the widget */
       }
     }, () => dataService.start({ ...DEFAULT_UI_CONFIG }))
 
@@ -360,24 +406,25 @@ export default {
         clearInterval(timer)
         clearInterval(uiTimer)
         dataService.stop()
+        petLayer.stop()
       })
     } catch {
       /* shim without onDispose; intervals die with the preview page */
     }
 
     // ── contributions ──────────────────────────────────────────────────────
-    // M5 floating pane (SDK probe: PANES_AREA + placement floating → native
-    // draggable card, viewport-clamped; no plugin-side dragging needed).
-    // De-roled title: the pane is the 鲸鱼管家 ledger panel; the whale
-    // CHARACTER itself is the Hermes built-in pet (DR-15).
-    ctx.register({
-      id: PANE_ID,
-      area: PANES_AREA,
-      title: 'Whale Wallet 管家',
-      order: 0,
-      data: { placement: 'floating', anchor: 'bottom-right', width: '280px' },
-      render: () => jsx(WhalePane, { $balance, $summary, $dashboard, $whale, $bubble, controller }),
-    })
+    // Optional butler pane (config.pane.enabled) — registration is deferred to
+    // config load; the pet interaction layer is the PRIMARY surface (DR-16).
+    function registerPane() {
+      ctx.register({
+        id: PANE_ID,
+        area: PANES_AREA,
+        title: 'Whale Wallet 管家',
+        order: 0,
+        data: { placement: 'floating', anchor: 'bottom-right', width: '280px' },
+        render: () => jsx(WhalePane, { $balance, $summary, $dashboard, $whale, $bubble, controller }),
+      })
+    }
 
     ctx.register({
       id: 'chip',

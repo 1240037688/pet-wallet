@@ -66,3 +66,9 @@
 - 状态：`FIXED`（README 已按当前真实状态修订；WORKLOG Goal 条目已追加）
 
 ## M11 多 Provider / M12 完整设置 UI / M13 打包 — V1 范围（非本轮 Goal 阻塞项，理由见上）
+
+
+### P1-4 宠物本体交互层（DR-16）— 2026-10-05
+- 状态：`FIXED + VERIFIED`（纯函数 10 条：tap 判定/命中/放置钳制/翻转/定位器；node 205 / pytest 188 全绿）
+- 交付：`desktop/src/ui/pet-layer.js`（a11y 锚点定位 + 捕获阶段 tap 判定 + 跟随泡泡宿主，原生 DOM）+ main.js 接线（pane 降级为 `pane.enabled` 可选，默认关）+ config.py `pane` 键。
+- NOT VERIFIED：真机点击宠物端到端（需用户部署；弹出态 overlay 不可交互为已知边界）。

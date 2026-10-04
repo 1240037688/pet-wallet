@@ -29,6 +29,10 @@
  *   - M8 wait-state poll (10s, same timer as controller.tick()): GET
  *     /wait-state → controller.syncWaiting; endpoint failure/404 means "no
  *     waiting" (WP-2 may not be deployed yet — defensive by design);
+ *   - WP-dashboard: the in-app page at /whale (routes area) + sidebar.nav row +
+ *     statusbar chip click → host.navigate('/whale'); the pet bubble's balance
+ *     text prefers GET /balance/all joined with config.bubble.balance_providers
+ *     (empty = all configured), falling back to the single GET /balance feed;
  *   - host.state.focusedUsage is captured as the reconnect/missing-usage
  *     salvage snapshot (display-grade; the ledger stays Python-side).
  *
@@ -60,6 +64,12 @@ import { createIngestClient } from './core/ingest-client.js'
 import { createSoundEngine } from './sound/engine.js'
 import { createPetLayer } from './ui/pet-layer.js'
 import { createResolver } from './ui/bubble/resolver.js'
+import {
+  bubbleBalanceText,
+  createDashboard,
+  normalizeSelectedProviders,
+  visibleBalanceProviders,
+} from './ui/dashboard.js'
 
 // Re-exported for preview/tests: the pane's whale, bubble and data atoms.
 export { $whale, $bubble }
@@ -72,12 +82,23 @@ export const $health = atom({ state: 'checking', version: null, schema_version: 
 // Chip-visible ledger/ingest state: { unavailable, queued, deadLetters, dropped }
 export const $ingest = atom({ unavailable: false, queued: 0, deadLetters: 0, dropped: 0 })
 
+// WP-dashboard bubble contract (runtime mirror of config.bubble.balance_providers;
+// the dashboard page re-sets it after every PUT /config — JS never persists):
+// provider ids whose balance the pet bubble shows; EMPTY = every configured one.
+export const $bubbleProviders = atom([])
+// Runtime mirror of the /balance/all → bubble text ('deepseek ¥1.10 | …');
+// null = nothing to show → the single-/balance fallback text is used instead.
+export const $bubbleBalanceText = atom(null)
+
 const HEALTH_POLL_MS = 60_000
 const WAIT_POLL_MS = 10_000 // wait-state poll + controller.tick share one timer
 
 const INGEST_WAIT_EVENT_PATH = '/ingest/wait-event'
 const WAIT_STATE_PATH = '/wait-state'
 const NOTIFICATIONS_PATH = '/notifications'
+const BALANCE_ALL_PATH = '/balance/all'
+// minimum gap between /balance/all pulls (piggybacks on poll-driven syncs)
+const BALANCE_ALL_MIN_INTERVAL_MS = 15_000
 
 // Mirror of whale_core.config.DEFAULTS (only the keys the JS half consumes).
 // Used when GET /config fails — a dashboard outage must never break the UI.
@@ -85,6 +106,7 @@ const DEFAULT_UI_CONFIG = {
   balance_poll_seconds: 60,
   usage_summary_poll_seconds: 30,
   sound: { enabled: false, muted: false, volume_global: 100 },
+  bubble: { balance_providers: [] },
 }
 
 // M6 mood surface: the ONLY normalized events that drive the mood machine
@@ -200,9 +222,10 @@ export default {
     const normalizer = createNormalizer()
     const tracker = createTurnTracker()
 
-    // ctx.rest adapter — POST shape (method/body JSON) mirrors the fetch-style
+    // ctx.rest adapter — POST/PUT shape (method/body JSON) mirrors the fetch-style
     // opts bag; exact production shape re-verified at the M5 real-machine smoke.
     const restPost = (path, body) => ctx.rest(path, { method: 'POST', body: JSON.stringify(body) })
+    const restGet = (path) => ctx.rest(path)
 
     const dataService = createDataService({ rest: (path) => ctx.rest(path) })
     const controller = createWhaleController()
@@ -350,14 +373,27 @@ export default {
     // display data feed for resolver placeholders (— semantics resolver-side):
     // atoms expose .subscribe without React (nanostores), consumed by both the
     // optional pane and the pet interaction layer.
-    const syncDisplayData = () => {
+    //
+    // WP-dashboard bubble balance source: prefer GET /balance/all (multi-
+    // provider rows joined with config.bubble.balance_providers — the list the
+    // dashboard page's show/hide toggles persist). An older Python half
+    // (endpoint absent) or any failure falls back to the single GET /balance
+    // atom feed; controller.setData's contract is unchanged.
+    let balanceAllAvailable = true
+    let lastBalanceAllAt = 0
+
+    const fallbackBalanceText = () => {
+      const bal = $balance.get?.() ?? null
+      return bal?.observed_balance_units != null
+        ? formatMoney(bal.observed_balance_units, { currency: bal.currency ?? undefined })
+        : null
+    }
+
+    const pushDisplayData = () => {
       try {
-        const bal = $balance.get?.() ?? null
         const sum = $summary.get?.() ?? null
         controller.setData({
-          balanceText: bal?.observed_balance_units != null
-            ? formatMoney(bal.observed_balance_units, { currency: bal.currency ?? undefined })
-            : null,
+          balanceText: $bubbleBalanceText.get?.() ?? fallbackBalanceText(),
           todayText: sum?.estimated_today_units != null
             ? formatMoney(sum.estimated_today_units, { currency: 'CNY' })
             : null,
@@ -369,9 +405,38 @@ export default {
         /* display data is cosmetic */
       }
     }
+
+    const refreshProviderBalances = async (force = false) => {
+      if (!balanceAllAvailable) return
+      const ts = Date.now()
+      if (!force && ts - lastBalanceAllAt < BALANCE_ALL_MIN_INTERVAL_MS) return
+      lastBalanceAllAt = ts
+      try {
+        const data = await restGet(BALANCE_ALL_PATH)
+        const rows = Array.isArray(data?.providers) ? data.providers : []
+        $bubbleBalanceText.set(bubbleBalanceText(visibleBalanceProviders(rows, $bubbleProviders.get?.() ?? [])))
+      } catch {
+        // 404 (older half) or outage → single /balance fallback (and stay there
+        // until reload; a dashboard outage must not double the poll traffic)
+        balanceAllAvailable = false
+        $bubbleBalanceText.set(null)
+      }
+      pushDisplayData()
+    }
+
+    const syncDisplayData = () => {
+      pushDisplayData()
+      void refreshProviderBalances()
+    }
+    // atom subscriptions return unsubscribers — collected for onDispose so a
+    // re-registered plugin never leaves stale listeners on shared atoms.
+    const unsubscribes = []
     try {
-      $balance.subscribe?.(syncDisplayData)
-      $summary.subscribe?.(syncDisplayData)
+      if (typeof $balance.subscribe === 'function') unsubscribes.push($balance.subscribe(syncDisplayData))
+      if (typeof $summary.subscribe === 'function') unsubscribes.push($summary.subscribe(syncDisplayData))
+      if (typeof $bubbleProviders.subscribe === 'function') {
+        unsubscribes.push($bubbleProviders.subscribe(() => void refreshProviderBalances(true)))
+      }
     } catch { /* shim atoms without subscribe */ }
     syncDisplayData()
 
@@ -390,6 +455,9 @@ export default {
 
     void loadUiConfig((path) => ctx.rest(path)).then((config) => {
       dataService.start(config)
+      // WP-dashboard: seed the bubble show-list from config (runtime mirror;
+      // the dashboard page keeps it fresh after every PUT /config)
+      $bubbleProviders.set(normalizeSelectedProviders(config?.bubble?.balance_providers))
       try {
         const sound = config?.sound ?? {}
         if (sound.enabled) attachSoundEngine(controller, sound)
@@ -407,12 +475,33 @@ export default {
         clearInterval(uiTimer)
         dataService.stop()
         petLayer.stop()
+        for (const unsubscribe of unsubscribes) {
+          try {
+            unsubscribe?.()
+          } catch {
+            /* atom unsubscribe is best-effort */
+          }
+        }
       })
     } catch {
       /* shim without onDispose; intervals die with the preview page */
     }
 
     // ── contributions ──────────────────────────────────────────────────────
+    // WP-dashboard: the in-app routes page + sidebar nav row. The dashboard
+    // factory owns the render; host.navigate is feature-detected inside.
+    const dashboard = createDashboard({
+      rest: (path, opts) => ctx.rest(path, opts),
+      host,
+      atoms: { $health, $bubbleProviders },
+    })
+    try {
+      ctx.register(dashboard.contribution)
+      ctx.register(dashboard.navContribution)
+    } catch {
+      /* routes/sidebar areas unavailable (e.g. preview shim) — chip still works */
+    }
+
     // Optional butler pane (config.pane.enabled) — registration is deferred to
     // config load; the pet interaction layer is the PRIMARY surface (DR-16).
     function registerPane() {
@@ -430,7 +519,7 @@ export default {
       id: 'chip',
       area: STATUSBAR_AREAS.right,
       order: 126,
-      render: () => renderWhaleChip($health, $ingest),
+      render: () => dashboard.wrapChip(renderWhaleChip($health, $ingest)),
     })
 
     // self-check toast (M1 pipeline + M5/M6/M7/M8-A surface; DR-15 de-roling)

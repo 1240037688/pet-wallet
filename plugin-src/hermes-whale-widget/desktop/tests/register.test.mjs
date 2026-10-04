@@ -54,6 +54,18 @@ function completeEvent(overrides = {}) {
   }
 }
 
+/** Invoke the chip render and peel the WP-dashboard navigation wrapper down to
+ *  the inner WhaleChip span, returning its text (main.js wraps the chip in a
+ *  click → host.navigate('/whale') layer). */
+function chipInnerText(vnode) {
+  let node = vnode.type(vnode.props)
+  while (node?.props?.children && typeof node.props.children === 'object') {
+    node = node.props.children.type(node.props.children.props)
+  }
+  assert.equal(node.type, 'span')
+  return String(node.props.children)
+}
+
 async function settled() {
   await new Promise((resolve) => setImmediate(resolve))
 }
@@ -96,13 +108,11 @@ test('built artifact registers under the shimmed runtime', async (t) => {
   assert.equal(mod.$health.get().state, 'ok')
   assert.equal(mod.$health.get().version, '0.1.0')
 
-  // chip renders the widget + connectivity text (function component → span)
+  // chip renders the widget + connectivity text (navigation wrapper → span)
   const vnode = chip.render()
   assert.equal(typeof vnode.type, 'function') // SDK renders the component
-  const rendered = vnode.type(vnode.props) // shim useValue = store.get()
-  assert.equal(rendered.type, 'span')
-  assert.match(String(rendered.props.children), /Whale widget/)
-  assert.match(String(rendered.props.children), /ok · v0\.1\.0 \(schema 1\)/)
+  assert.match(chipInnerText(vnode), /Whale widget/)
+  assert.match(chipInnerText(vnode), /ok · v0\.1\.0 \(schema 1\)/)
 })
 
 test('M1 pipeline: gateway events → settled turn → POST /ingest/turn', async (t) => {
@@ -205,6 +215,5 @@ test('M1 degraded surface: dashboard down → dead letter + 记账暂不可用 o
   // chip surfaces the degraded ledger state
   const chip = registered.find((c) => c.id === 'chip')
   const vnode = chip.render()
-  const rendered = vnode.type(vnode.props)
-  assert.match(String(rendered.props.children), /记账暂不可用/)
+  assert.match(chipInnerText(vnode), /记账暂不可用/)
 })

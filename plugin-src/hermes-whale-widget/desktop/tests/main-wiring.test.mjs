@@ -25,11 +25,33 @@ function makeCtx({ restImpl } = {}) {
   const ctx = {
     rest: async (p, opts = {}) => {
       restCalls.push({ path: p, method: opts.method ?? 'GET', body: opts.body ?? null })
-      if (restImpl) return restImpl(p, opts)
+      // a partial restImpl may return undefined to fall through to the defaults
+      const custom = restImpl ? restImpl(p, opts) : undefined
+      if (custom !== undefined) return custom
       if (p === '/health') return { ok: true, plugin: 'whale-widget', version: '0.1.0', schema_version: 1 }
       if (p === '/config') return { balance_poll_seconds: 60, usage_summary_poll_seconds: 30 }
       if (p === '/balance') return { state: 'ok', observed_balance_units: 11_000_000_000, currency: 'CNY', credential: { configured: true } }
+      if (p === '/balance/all') {
+        return {
+          providers: [
+            {
+              provider_id: 'deepseek',
+              known: true,
+              configured: true,
+              source: 'hermes_secret',
+              credential_id: 'deepseek:abcd1234',
+              fingerprint: 'fp0000000000000000000001',
+              state: 'ok',
+              observed_balance_units: 110_000_000,
+              currency: 'CNY',
+            },
+          ],
+        }
+      }
       if (p === '/usage/summary') return { estimated_today_units: 456_700_000, turns_today: 12, estimated_today: [{ currency: 'CNY' }] }
+      if (p === '/usage/turns') return { turns: [], count: 0, limit: 20 }
+      if (p === '/providers/status') return { providers: [] }
+      if (p === '/pricing') return { builtin: [], custom: [], notes: [] }
       if (p === '/wait-state') return { question_slots: [], approval_slots: [], fired_dedup_keys: [] }
       if (p === '/ingest/turn') return { status: 'accepted', accepted: 1, duplicate: 0, settled: SETTLED }
       if (p === '/ingest/wait-event') return { ok: true }
@@ -70,11 +92,19 @@ test('built artifact exists for the wiring smoke', () => {
 test('floating pane contribution: area panes + native floating data + WhalePane render', async (t) => {
   register('./loader.mjs', import.meta.url)
   const mod = await import('../plugin.js')
-  const { ctx, registered, disposed } = makeCtx()
+  // DR-16: the butler pane is OPT-IN via config.pane.enabled — registration is
+  // config-gated and therefore asynchronous (after the /config load lands).
+  const { ctx, registered, disposed } = makeCtx({
+    restImpl: (p) => {
+      if (p === '/config') return { balance_poll_seconds: 60, usage_summary_poll_seconds: 30, pane: { enabled: true } }
+      return undefined
+    },
+  })
   mod.default.register(ctx)
   t.after(() => {
     for (const fn of disposed) fn()
   })
+  await settledNow()
 
   const pane = registered.find((c) => c.id === 'whale-widget-pane')
   assert.ok(pane, 'pane contribution registered (chip stays separate)')
@@ -106,9 +136,129 @@ test('config → data service start: /config fetched then /balance + /usage/summ
   assert.ok(paths.includes('/config'), 'config fetched from the dashboard half')
   assert.ok(paths.indexOf('/balance') > paths.indexOf('/config'), 'balance poll starts after config')
   assert.ok(paths.includes('/usage/summary'), 'summary poll started')
+  assert.ok(paths.includes('/balance/all'), 'bubble balance source (/balance/all) pulled')
   assert.equal(mod.$balance.get()?.observed_balance_units, 11_000_000_000)
   assert.equal(mod.$summary.get()?.turns_today, 12)
   assert.equal(mod.$dashboard.get().state, 'ok')
+})
+
+test('WP-dashboard: routes page + sidebar.nav row registered for /whale', async (t) => {
+  register('./loader.mjs', import.meta.url)
+  const mod = await import('../plugin.js')
+  const { ctx, registered, disposed } = makeCtx()
+  mod.default.register(ctx)
+  t.after(() => {
+    for (const fn of disposed) fn()
+  })
+
+  const page = registered.find((c) => c.id === 'dashboard')
+  assert.ok(page, 'routes page contribution registered')
+  assert.equal(page.area, 'routes')
+  assert.equal(page.title, 'Whale Wallet')
+  assert.deepEqual(page.data, { path: '/whale' })
+  assert.equal(typeof page.render, 'function')
+
+  const nav = registered.find((c) => c.id === 'nav')
+  assert.ok(nav, 'sidebar nav contribution registered')
+  assert.equal(nav.area, 'sidebar.nav')
+  assert.equal(nav.data.path, '/whale')
+  assert.equal(nav.data.label, 'Whale Wallet')
+  assert.equal(typeof nav.data.codicon, 'string')
+})
+
+test('WP-dashboard: chip click navigates to /whale (host.navigate feature-detected)', async (t) => {
+  register('./loader.mjs', import.meta.url)
+  const { navigations } = await import('./shims/sdk-shim.mjs')
+  const mod = await import('../plugin.js')
+  const { ctx, registered, disposed } = makeCtx()
+  mod.default.register(ctx)
+  t.after(() => {
+    for (const fn of disposed) fn()
+  })
+
+  const chip = registered.find((c) => c.id === 'chip')
+  const vnode = chip.render()
+  assert.equal(typeof vnode.type, 'function', 'chip wrapped by the dashboard navigation layer')
+  const rendered = vnode.type(vnode.props)
+  assert.equal(rendered.type, 'span')
+  assert.equal(typeof rendered.props.onClick, 'function')
+  rendered.props.onClick({ preventDefault: () => {} })
+  assert.ok(navigations.includes('/whale'), 'chip click → host.navigate("/whale")')
+})
+
+test('WP-dashboard bubble: /balance/all rows → joined balance text (deepseek ¥1.10)', async (t) => {
+  register('./loader.mjs', import.meta.url)
+  const mod = await import('../plugin.js')
+  const { ctx, disposed } = makeCtx()
+  mod.default.register(ctx)
+  t.after(() => {
+    for (const fn of disposed) fn()
+  })
+  await flushAsync()
+
+  assert.equal(mod.$bubbleBalanceText.get(), 'deepseek ¥1.10')
+})
+
+test('WP-dashboard bubble: show-list filters /balance/all rows (config.bubble.balance_providers)', async (t) => {
+  register('./loader.mjs', import.meta.url)
+  const mod = await import('../plugin.js')
+  const { ctx, disposed } = makeCtx({
+    restImpl: (p) => {
+      if (p === '/balance/all') {
+        return {
+          providers: [
+            { provider_id: 'deepseek', configured: true, state: 'ok', observed_balance_units: 110_000_000, currency: 'CNY' },
+            { provider_id: 'openai', configured: true, state: 'ok', observed_balance_units: 42_000_000, currency: 'USD' },
+          ],
+        }
+      }
+      if (p === '/config') return { bubble: { balance_providers: ['openai'] } }
+      if (p === '/health') return { ok: true, version: '0.1.0', schema_version: 1 }
+      if (p === '/balance') return { state: 'ok', observed_balance_units: 1, credential: {} }
+      if (p === '/usage/summary') return { estimated_today_units: null, turns_today: 0 }
+      if (p === '/wait-state') return { question_slots: [], approval_slots: [], fired_dedup_keys: [] }
+      throw new Error(`unexpected rest path: ${p}`)
+    },
+  })
+  mod.default.register(ctx)
+  t.after(() => {
+    for (const fn of disposed) fn()
+  })
+  await flushAsync()
+
+  // the config-seeded show-list selects ONLY openai; deepseek's balance is hidden
+  assert.equal(mod.$bubbleBalanceText.get(), 'openai $0.42')
+})
+
+test('WP-dashboard bubble: /balance/all absent (older half) → single /balance fallback, no crash', async (t) => {
+  register('./loader.mjs', import.meta.url)
+  const mod = await import('../plugin.js')
+  const { ctx, restCalls, handlers, disposed } = makeCtx({
+    restImpl: (p) => {
+      if (p === '/balance/all') throw new Error('404 not found')
+      if (p === '/health') return { ok: true, version: '0.1.0', schema_version: 1 }
+      if (p === '/config') return { balance_poll_seconds: 60, usage_summary_poll_seconds: 30 }
+      if (p === '/balance') return { state: 'ok', observed_balance_units: 22_000_000, currency: 'CNY', credential: { configured: true } }
+      if (p === '/usage/summary') return { estimated_today_units: null, turns_today: 0 }
+      if (p === '/wait-state') return { question_slots: [], approval_slots: [], fired_dedup_keys: [] }
+      if (p === '/ingest/turn') return { status: 'accepted', accepted: 1, duplicate: 0 }
+      throw new Error(`unexpected rest path: ${p}`)
+    },
+  })
+  mod.default.register(ctx)
+  t.after(() => {
+    for (const fn of disposed) fn()
+  })
+  await flushAsync()
+
+  assert.equal(mod.$bubbleBalanceText.get(), null, 'no provider text on the fallback path')
+  const attempts = restCalls.filter((c) => c.path === '/balance/all').length
+  assert.ok(attempts >= 1, 'fallback attempted at least once')
+
+  // the fallback is sticky: a settled turn re-triggers the display sync but no re-poll
+  handlers['message.complete'](completeEvent())
+  await flushAsync()
+  assert.equal(restCalls.filter((c) => c.path === '/balance/all').length, attempts, 'no further /balance/all attempts')
 })
 
 test('settled turn cost (WP-2 contract) → controller turn_cost bubble + money mood', async (t) => {

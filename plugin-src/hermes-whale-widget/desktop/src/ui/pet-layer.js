@@ -90,16 +90,35 @@ export function moduleCss(style) {
 
 const BUBBLE_CSS = {
   background: '#ffffff',
-  border: '1px solid #d8e6f3',
-  borderRadius: '12px',
-  boxShadow: '0 4px 14px rgba(15, 43, 69, 0.18)',
+  border: '1.5px solid #c3daf0',
+  borderRadius: '16px',
+  boxShadow: '0 6px 20px rgba(15, 43, 69, 0.22)',
   boxSizing: 'border-box',
   color: '#25384c',
-  fontSize: '12px',
-  maxWidth: '260px',
-  padding: '8px 10px',
+  fontSize: '14px', // DSH-scale bubble text (was 12px)
+  lineHeight: '1.55',
+  maxWidth: '420px', // DSH-scale bubble (was 260px)
+  padding: '12px 16px',
   pointerEvents: 'auto',
   position: 'fixed',
+}
+
+const TAIL_SIZE = 12 // diamond side; sticks out BUBBLE_MARGIN/2 past the bubble edge
+
+/** Pure: tail style for the bubble→pet pointer (above: tail at bottom). */
+export function tailCss(above) {
+  const common = {
+    background: '#ffffff',
+    borderRight: '1.5px solid #c3daf0',
+    borderTop: '1.5px solid #c3daf0',
+    height: `${TAIL_SIZE}px`,
+    position: 'absolute',
+    transform: 'rotate(45deg)',
+    width: `${TAIL_SIZE}px`,
+  }
+  return above
+    ? { ...common, bottom: `-${Math.round(TAIL_SIZE / 2) - 1}px`, left: '50%', marginLeft: `-${Math.round(TAIL_SIZE / 2)}px` }
+    : { ...common, top: `-${Math.round(TAIL_SIZE / 2) - 1}px`, left: '50%', marginLeft: `-${Math.round(TAIL_SIZE / 2)}px`, transform: 'rotate(225deg)' }
 }
 
 /**
@@ -173,10 +192,14 @@ export function createPetLayer({ controller, $bubble, doc = null, resolve, now =
     for (const [k, v] of Object.entries(BUBBLE_CSS)) bubbleEl.style[k] = v
     for (const row of page.rows) {
       const rowEl = mk('div')
-      rowEl.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;'
+      rowEl.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;'
       for (const mod of row.modules) rowEl.appendChild(buildModule(mod, mk))
       bubbleEl.appendChild(rowEl)
     }
+    // DSH-style tail: diamond pointer toward the pet (orientation fixed in reposition)
+    const tail = mk('div')
+    tail.dataset.role = 'tail'
+    bubbleEl.appendChild(tail)
     bubbleEl.addEventListener('click', (e) => {
       e.stopPropagation()
       controller.click()
@@ -197,8 +220,8 @@ export function createPetLayer({ controller, $bubble, doc = null, resolve, now =
     if (!rect || rect.width === 0) return
     const placement = placeBubble(
       rect,
-      bubbleEl.offsetWidth || 200,
-      bubbleEl.offsetHeight || 48,
+      bubbleEl.offsetWidth || 320,
+      bubbleEl.offsetHeight || 64,
       { width: view.defaultView.innerWidth, height: view.defaultView.innerHeight },
     )
     const key = `${placement.left},${placement.top}`
@@ -206,6 +229,13 @@ export function createPetLayer({ controller, $bubble, doc = null, resolve, now =
       bubbleEl.style.left = `${placement.left}px`
       bubbleEl.style.top = `${placement.top}px`
       lastPlacement = key
+    }
+    // tail orientation: above the pet → tail hangs at the bubble's bottom
+    const above = placement.top + (bubbleEl.offsetHeight || 64) <= rect.top + 2
+    const tail = bubbleEl.querySelector('[data-role="tail"]')
+    if (tail) {
+      const css = tailCss(above)
+      for (const [k, v] of Object.entries(css)) tail.style[k] = v
     }
   }
 

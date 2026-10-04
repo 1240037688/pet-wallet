@@ -29,7 +29,7 @@ from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 
-from . import archive, balance_ledger, config, db, ingest, migrations, notifications_api, poller, pricing, security, usage_ledger, wait_api
+from . import archive, balance_ledger, config, db, ingest, migrations, notifications_api, poller, pricing, providers_api, security, usage_ledger, wait_api
 from .clock import now_ms
 from .logging_setup import get_logger, setup_logging
 
@@ -40,6 +40,7 @@ PLUGIN_NAME = "whale-widget"
 router = APIRouter()
 router.include_router(wait_api.router)  # M8: /ingest/wait-event + /wait-state (cross-package contract)
 router.include_router(notifications_api.router)  # Goal pass: rules-engine notification consumer surface
+router.include_router(providers_api.router)  # WP-dashboard: /providers/status + /balance/all (bubble data source)
 
 _DASHBOARD_DIR = Path(__file__).resolve().parent.parent
 

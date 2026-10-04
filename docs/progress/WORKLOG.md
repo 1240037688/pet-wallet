@@ -363,3 +363,79 @@ M5 基础鲸鱼（floating pane SDK 探查 + 透明/置顶边界确认）→ M6 
 - 管家面板降级为可选：config.pane.enabled（默认 false）时才注册；$balance/$summary 订阅喂 resolver 占位数据（两渲染面共用）。
 - 门禁：node **205**（+10：tap 判定/命中/放置/定位器/样式映射）/ pytest 188 / build + 双重安全自检全绿。
 - 边界：弹出态宠物 overlay（独立窗口）不可交互——upstream host.pet.* 提案的正当时机。
+
+## 2026-10-05 — WP-matrix：DSH 功能复刻矩阵（docs/design/DSH_REPLICATION_MATRIX.md 新建）
+
+### 完成了什么
+
+- 新建 `docs/design/DSH_REPLICATION_MATRIX.md`：将 DSH 六大系统（记账与显示 33 项 / 交互 13 项 / 泡泡 23 项 / 提醒 10 项 / 音效·角色·图片 15 项 / Provider+设置 18 项）共 **112 项功能逐行对照本项目代码现状**，每行给出复刻状态（✅/🔶/🔜/❌）+ file:ref 证据 + 差距理由或补齐路径与量级（S/M/L）。
+- **全部「已复刻」判定基于本轮真实代码核对与测试复跑**（非照抄文档）：
+  - `node --test`：**205 条 / 204 通过 / 1 失败**——失败为 `desktop/tests/main-wiring.test.mjs:70`「pane 注册」断言，系 DR-16 把 pane 改为 config 载入后条件注册（默认关）后断言未同步，属测试过期非功能回归（已在矩阵 §6 附注标注）。
+  - `pytest`：**188 passed**。
+- 汇总统计（文首汇总表）：✅ **59**（52.7%，含「由 Hermes 宿主核心原生承接」并注明承接面）｜🔶 **14**｜🔜 **30**｜❌ **9**（吸附①/翻转①/透明像素穿透①/自定义角色①/移动端②/默认素材③/滚轮让位③/IME③/DSH 宿主适配层③）。
+- 文末「复刻优先级建议」：V1 队列 8 项（设置 UI M12 / 点击刷新接线 / 7 日历史+模型占比 UI / bonus·recharge·link 模块 / 滚动动画+变化泡泡 / OS 通知 / 真机冒烟 / 红测修复），V2 队列 6 项（泡泡编辑器 L / 34 provider 模板 M~L / 峰谷电价 M / 图库+音效素材 M / track③ / upstream pet API），逐项标注量级并引用 REMAINING_WORK（P3-1/P3-2/P3-3/P3-4/M10/M11/M12/M13）。
+- ❌ 判定全部按任务要求落到机制：① Hermes 核心所有权（SDK 零 pet 导出 [PET] §3、窗口 deny-all `window-open-policy.ts:74-93`、透明窗核心专用 `electron/main.ts:1506-1509`、pet RPC 核心内部 `tui_gateway/server.py:180`）；② 平台机制缺失（Hermes 无移动端宿主）；③ DSH 特有技术/素材依赖（素材不在 MIT 不可再分发 [DSH] §G、tapIndex/composer/滚轮/IME 为 DSH 宿主页面级 hack）。每条均给最接近替代方案（皮肤包+petdex+/pet-generate、a11y 锚点跨皮肤通用、ctx.os.openExternal 等）。
+
+### 设计变化 / 与既有决策关系
+
+- 无架构决策变更：矩阵是对 DR-1~16 现状的**盘点与排期输入**，不新增 DR；文中如实记录三处「实现与 DSH 语义有差异」供后续决策——① balance_summary 跨 scope 合并 vs DSH「历史本不合并」（多 key 前需拆，S）；② 等待档 rank=4 排队不抢占 vs DSH 等待档抢占（对齐 3 行，S）；③ 自定义 USD 单价不折 CNY vs DSH 折算统一记 CNY（DR-12 有意为之）。
+- 新发现并记录两处待办：泡泡定义尚未持久化（config.py 无 items 键，编辑器前置，S）；notifications KINDS 已预留 balance_change 但无 fire 方（S）。
+
+### 测试结果
+
+- 纯分析文档轮：零代码改动、未构建、未 commit（任务约束）。测试复跑仅作现状基线取证：node 204/205（1 条过期断言红，见上）+ pytest 188 全绿，与 REMAINING_WORK 基线（node 205 / pytest 188）一致。
+- 只写文件：`docs/design/DSH_REPLICATION_MATRIX.md`（新建）+ 本 WORKLOG 追加条目。
+
+### 未解决问题 / 下一阶段
+
+- 3 条 NOT VERIFIED 真机项（皮肤包装载 / 宠物点击端到端 / 部署链路）仍待用户执行——矩阵 V1 队列第 7 项。
+- main-wiring 红测断言需随 DR-16 更新（V1 队列第 8 项，归代码轮处理）。
+
+## 2026-10-05 — WP-dashboard 完成：应用内 Whale Wallet 面板 + providers REST + 泡泡选择性余额
+
+### 完成了什么
+
+- **Python 半体（REST 新面，whale_core/providers_api.py 新建）**：
+  - `GET /providers/status` → `{providers:[{provider_id, known, configured, source, credential_id?, fingerprint?, state?, observed_balance_units?, currency?}]}`：遍历 registry.known_ids()，逐家合并 gateway.credential_status 与 balance_ledger.balance_state（五状态）；未配置行 state='unknown' 且绝无 credential 字段；observed_balance_units/currency 仅在真实观测存在时出现（缺失 ≠ 0）。
+  - `GET /balance/all` → 同行形、仅 configured（泡泡余额数据源）。api.py 一行挂载（include_router + import 行内追加）；运行时经函数级 `from .api import _require_ledger` 复用懒初始化与 fail-closed 503（同 wait_api/notifications_api 模式）。
+  - `whale_core/config.py` DEFAULTS 新增 `bubble: { balance_providers: [] }`（泡泡显示白名单；空 = 显示全部 configured；PUT /config 白名单因此放行该节）。
+  - 契约测试 `tests/test_providers_api.py`（7 条）：行形/未配置无凭据字段/balance_all 过滤/ok+error 保持 last known/凭据不泄漏（fake key 不出现在响应）。
+- **desktop（dashboard.js 新建，main.js 仅追加接线）**：
+  - `createDashboard({ rest, host, atoms })` → `{contribution, navContribution, wrapChip}`：routes 页（id 'dashboard'，title 'Whale Wallet'，data.path '/whale'，契约对齐 app/routes.ts:88-117）+ sidebar.nav 数据行（data: {path, label, codicon:'credit-card'}，形状对齐 routes.ts:131-139）+ 状态栏芯片点击包装（host.navigate 存在性 feature-detect，无 navigate 时退化为纯展示 span）。
+  - 页面 8 区块（纯 inline style，无 tailwind；SDK 组件 Button/ToggleRow/Select 系列/EmptyState/ErrorState；tone 色复用 balance-view 语义）：①头部（🐋 Whale Wallet 用量 + /health 连接点 [$health atom] + 刷新按钮 = version atom bump + invalidateQueries）；②余额卡（/providers/status 每家一张：五状态语义 ok=金额绿 / stale=金额+灰「未刷新」/ error=last known+⚠「获取失败」/ zero=实测 0 青 / 未配置=「—」+引导；每卡 POST /balance/refresh 手动刷新 + ToggleRow「泡泡显示余额」→ PUT /config 写 bubble.balance_providers，乐观更新运行时 atom、失败回滚 + host.notify）；③今日概览（estimated_today_units 大字 + 「估算」角标 + turns/五类 tokens/未计价数）；④N 日柱状图（7/14/30 Select；高度按日 estimated 归一化；token_only 虚纹柱；hover title 出数值/部分观测/N 轮未计价）；⑤模型分布表（轮次 desc→估算费用 desc，五类 token 列）；⑥最近轮次前 20（模型/时间/费用/final·provisional 着色）；⑦价目表（builtin+custom 双表 + notes，unverified 标注说明）；⑧泡泡显示规则脚注。加载/错误/空态齐全（真实 REST 数据，零假数据）。
+  - 页面无 react hooks：状态全在 nanostores atom（$version/$chartDays/$refreshing 每实例）+ useValue/useQuery/useQueryClient。
+  - main.js：注册 routes 页 + sidebar.nav 行；芯片 render 包 `dashboard.wrapChip(renderWhaleChip(...))`；`$bubbleProviders`/`$bubbleBalanceText` 两个新模块 atom 导出；loadUiConfig 启动时用 config.bubble.balance_providers 播种（DEFAULT_UI_CONFIG 镜像加 bubble 键）。
+  - **泡泡选择性余额（交付 3）**：syncDisplayData 改为 pushDisplayData + refreshProviderBalances——优先 GET /balance/all（15s 节流，吃轮询顺车、零新定时器），行按 $bubbleProviders 过滤（空 = 全部），`bubbleBalanceText` 拼 `deepseek ¥1.10 | openai $0.42`（' | ' 连接）喂 controller.setData.balanceText；/balance/all 不存在（旧 Python 半体）或失败 → 粘性回退单 /balance 原文本路径；setData 契约不变。
+  - 生命周期卫生：三个 atom 订阅的 unsubscriber 收集进 onDispose（修复多 register 场景下共享 atom 的陈旧监听者）。
+- **测试**：dashboard.test.mjs 新建 27 条（纯逻辑 + fake host/rest，无 DOM）：show-list 归并过滤 / 余额文本拼接（含多 provider ' | '）/ 五状态卡 VM / toggle 物化语义 / 柱高归一化（max=100%、半值 50%、null=0、全空无 NaN）/ today 卡 / 模型排序 / createDashboard 三贡献形状 + 芯片跳转/降级。
+
+### 设计变化 / 与既有决策关系
+
+- 芯片点击 → host.navigate('/whale') 采用「包装而非改写」：statusbar.js 零改动（不在本 WP 所有权内），renderWhaleChip 原样作为 children。
+- 隐藏列表落 config.bubble.balance_providers（非 ctx.storage）：泡泡数据源跨重启生效 + 与主会话文档契约一致；JS 侧 $bubbleProviders 仅为运行时镜像（AGENTS §8 JS 不持久化）。
+- 手动刷新沿用既有 POST /balance/refresh（当前 API 不带 provider_id，仅刷新默认 provider；registry 现仅 deepseek，无功能缺口）。
+- **修复 V1 队列第 8 项**：main-wiring 面板红测随 DR-16 语义更新——pane 注册是 config 门控异步行为，测试改为 restImpl 开 pane.enabled + await config 落地后断言；makeCtx restImpl 支持 undefined 落回默认链。
+- react/jsx-runtime 自动运行时纪律：jsx(type, props, key) 三参封顶、children 一律进 props（本 WP 初稿曾用 varargs children，自动运行时静默丢弃——已全文件修正，此坑对后续 jsx() 手写代码是个警示）。
+
+### 测试结果
+
+- npm test → **237 passed, 0 failed**（基线 205 + dashboard 27 + main-wiring 新接线 5；两次连跑稳定）。
+- build（node tools/build-desktop.mjs，产物 114,407 bytes + dist/ 副本）+ `node --check` 通过。
+- 双重安全自检：tools/check-security.mjs OK（import 白名单/无禁用模式/无凭据形状）；tools/check-security.py OK（104 文件）。
+- pytest `--basetemp=.pytest-tmp-d` → **195 passed**（188 + test_providers_api.py 7 条）。
+- 更新的既有测试（最小改动）：main-wiring.test.mjs（makeCtx 增 /balance/all 等默认响应 + fall-through；面板红测按 DR-16 修复；新增 routes/nav/芯片跳转/泡泡文本/回退 5 条）；register.test.mjs（芯片断言加 peel 导航包装 helper，文本断言不变）；tests/shims/sdk-shim.mjs（增量：ROUTES_AREA/SIDEBAR_NAV_AREA/host.navigate/useQuery/useQueryClient/组件空 stub——原有导出零改动）。
+
+### 偏差与说明
+
+1. sdk-shim.mjs / register.test.mjs 不在任务书所有权清单内，但为「npm test 全绿」硬约束所必需（新增 SDK 具名导入 + 芯片包装改变渲染树形状）；全部为增量/最小改动，未动并行工程师的 pet-layer.js / bubble/defaults.js / docs 其它文件。
+2. 面板红测（V1 队列第 8 项）一并修复：该断言在 DR-16 面板改 config 门控后即无法同步通过，属遗留红测，非本轮引入。
+3. `bubble.balance_providers` 的「隐藏最后一个 → 列表变空 = 回到显示全部」是「空=全部」契约的固有语义，无法表达「全部隐藏」；页面脚注已说明规则。
+4. 未 commit（按任务约束）；未触碰 docs 其它文件 / INSTALL / README。
+- 未解决问题 / 下一阶段：真机冒烟（/whale 页面视觉、泡泡多 provider 文本「deepseek ¥1.10 | …」实际渲染、PUT /config 回写）待用户配合；M11 provider 泛化后 /providers/status 行形若扩展需同步 dashboard.js providerCards。
+
+## 2026-10-05 — 三项增强：agent 面板 / DSH 大泡泡 / 复刻矩阵
+
+- **WP-dashboard（子代理）**：`/whale` 应用内页面（routes area + sidebar.nav 侧栏入口 + 状态栏芯片点击跳转 host.navigate）——余额卡五状态语义 + 手动刷新 + **泡泡余额显示/隐藏切换（持久化 bubble.balance_providers）**、今日概览（估算角标）、7/14/30 日 CSS 柱状图、模型分布表、最近轮次、价目表；新 REST：GET /providers/status、GET /balance/all（泡泡数据源，多厂商前向兼容）。node 237 / pytest 195。
+- **主会话（DSH 大泡泡）**：宠物泡泡升级 DSH 规格——maxWidth 260→420px、字号 12→14、内边距 12×16、圆角 16、**指向宠物的菱形尾巴**（reposition 时按上/下位置翻转朝向）+ 默认内容字号整体上调；renderer（可选面板）同步。
+- **WP-matrix（子代理）**：`docs/design/DSH_REPLICATION_MATRIX.md`——112 项逐条对齐：✅ 59 / 🔶 14 / 🔜 30 / ❌ 9（❌ 三大类：核心所有权〔宠物姿态/吸附/翻转/图库〕、平台缺失〔移动端〕、DSH 特有〔素材不可再分发 + 宿主 DOM hack 无对应面〕，全部附 file:line 或约束条款证据 + 替代方案）。
+- 门禁：node 237 / pytest 195 / build + 双重安全自检全绿。

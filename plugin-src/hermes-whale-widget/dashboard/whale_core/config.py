@@ -62,6 +62,13 @@ DEFAULTS: dict[str, Any] = {
         "enabled": True,
         "turn_cost_ttl_ms": 5000,
     },
+    # Pet-bubble balance display (WP-dashboard): provider ids whose balance the
+    # pet bubble shows; EMPTY = every configured provider. Written from the
+    # dashboard page's show/hide toggles (PUT /config) — contract synced with
+    # the main session (docs); the desktop half reads /balance/all + this list.
+    "bubble": {
+        "balance_providers": [],
+    },
     # Sound (M9; engine exists but no clips ship by default → silent until
     # the user configures assets; enabled=false keeps the Phase-1 default quiet)
     "sound": {

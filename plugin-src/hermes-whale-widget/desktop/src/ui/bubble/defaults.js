@@ -12,8 +12,8 @@ export const DEFAULT_GREETING = validateBubble({
     {
       kind: 'custom',
       modules: [
-        { type: 'text', text: '嗨，我是记账小鲸鱼 🐋', style: { bold: true, size: 13 } },
-        { type: 'text', text: '点点我，看看花了多少～' },
+        { type: 'text', text: '嗨，我是记账小鲸鱼 🐋', style: { bold: true, size: 16 } },
+        { type: 'text', text: '点点我，看看花了多少～', style: { size: 14 } },
       ],
     },
     {
@@ -23,7 +23,7 @@ export const DEFAULT_GREETING = validateBubble({
         { w: 2, item: { kind: 'custom', modules: [{ type: 'estimated_today', row: 0, style: { bold: true } }, { type: 'text', row: 1, text: '这是今日估算消费（估算值）' }] } },
       ],
     },
-    { kind: 'custom', modules: [{ type: 'text', text: '有预算和余额提醒的话，我会第一时间告诉你！' }] },
+    { kind: 'custom', modules: [{ type: 'text', text: '有预算和余额提醒的话，我会第一时间告诉你！', style: { size: 14 } }] },
   ],
 })
 
@@ -34,9 +34,9 @@ export const DEFAULT_TURN_COST = validateBubble({
     {
       kind: 'custom',
       modules: [
-        { type: 'text', text: '本轮消耗', style: { size: 11, color: '#5b6472' } },
-        { type: 'turn_cost', row: 1, style: { bold: true, size: 13 } },
-        { type: 'text', row: 2, text: '（估算值）', style: { size: 10, color: '#8a93a1' } },
+        { type: 'text', text: '本轮消耗', style: { size: 12, color: '#5b6472' } },
+        { type: 'turn_cost', row: 1, style: { bold: true, size: 17 } },
+        { type: 'text', row: 2, text: '（估算值）', style: { size: 11, color: '#8a93a1' } },
       ],
     },
   ],

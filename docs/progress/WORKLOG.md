@@ -298,3 +298,60 @@ M5 基础鲸鱼（floating pane SDK 探查 + 透明/置顶边界确认）→ M6 
 - 最终门禁：node **190**（3 连跑稳定，flake 已用 flushAsync 加固）/ pytest **188** / build + node --check + 双重安全自检全绿。
 - 产出：REMAINING_WORK.md（P0-P3 全部标记 FIXED/VERIFIED/DEFERRED-BY-DESIGN）、FINAL_VALIDATION.md（验收矩阵）、FINAL_GOAL_REPORT.md。
 - **DoD 结论**：环境内可达范围全部达成；真机端到端 NOT VERIFIED（D:\hermes 只读约束），执行路径已备（INSTALL.md + CHECKLIST 人工步骤）。
+
+## 2026-10-04 — WP-ui：desktop 半体去角色化（鲸鱼管家面板，DR-15 宿主化）
+
+- 背景决策：不再自建宠物角色，角色由 Hermes 内置宠物系统承载（穿我们的鲸鱼皮肤包，唯一合法接口 = 皮肤包文件，见 docs/research/HERMES_PET_SYSTEM.md §3-4）；floating pane 改造为「鲸鱼管家」随身账本面板。
+- 改造点（全部限 desktop/src + desktop/tests + WORKLOG）：
+  - **`desktop/src/ui/whale-pane.js` 重写**：移除 WhaleActor 渲染；结构 = 标题行「🐋 鲸鱼管家」+ mood→强调色小圆点（`data-mood` 属性 + aria-label）+ BubbleLayer + DataCard（原样）；面板注释写明角色承载语义（HERMES_PET_SYSTEM.md）与「拖到宠物旁」使用建议（title 提示）。press/release/click 接线保留并**升级为整面板交互面**（原挂在自建鲸鱼 actor 上，actor 退役后改挂面板根 div，role=button + tabIndex 0），点击面板 = 泡泡交互 + 音效挂点不变。
+  - **`desktop/src/ui/whale-actor.js` 删除**（退役）：grep 全仓确认代码引用仅 whale-pane（已重写）与生成产物（已重建）；core/whale-state.js 状态机原样保留，继续驱动泡泡与面板强调色。
+  - **`desktop/src/ui/controller.js`**：mood 发布不变；新增导出纯函数 `moodAccent(mood)`（idle #6b7280 灰 / press #3f97de 蓝 / happy #2e7d32 绿 / money #0891b2 青 / waiting #e8a13a 黄；未知 mood 回落 idle 灰）。
+  - **`desktop/src/main.js`**：pane 注册 title 改「Whale Wallet 管家」；self-check toast 改「Whale Wallet 管家已加载（角色 = Hermes 内置宠物；…）」；头注释新增 Pet hosting (DR-15) 段落 + 2 处 "whale face" 注释改为 mood→泡泡/强调色表述；其余逻辑（M1 管线/轮询/事件面）零改动。
+- 测试（全部真实输出）：
+  - npm test → **195 passed, 0 failed**（原 190 + 新增 5，两次连跑稳定；无失败、无跳过）。新增：tests/whale-pane.test.mjs（3 条：去角色结构断言——树内零 whale-actor/零 SVG、标题行+accent 圆点、整面板 press/release/click 接线 + greeting 泡泡渲染；accent 圆点随状态机 press/waiting/idle 变色）；controller.test.mjs 增 moodAccent 映射 2 条。更新：main-wiring.test.mjs pane title 断言 'Whale Widget' → 'Whale Wallet 管家'。
+  - `node tools/build-desktop.mjs` 重建产物（68,967 bytes）+ `node --check` 通过；产物内 0 处 WhaleActor/whale-actor 残留（dist/ 同步复制）。
+  - `node tools/check-security.mjs` → OK；`.venv/Scripts/python.exe tools/check-security.py` → OK（97 文件）。
+  - pytest `--basetemp=.pytest-tmp-u` → **188 passed**（Python 半体不受影响，按任务要求回归确认）。
+- 偏差与说明：
+  1. **press/release/click 从「鲸鱼图形」改挂「面板根节点」**：任务书要求保留接线且"点击面板=泡泡交互+音效"，actor 退役后交互面唯一合理落点是面板本体（role=button/tabIndex 保持可键盘聚焦）；DataCard 文本因 `userSelect:'none'` 不可划选——交互面语义优先。
+  2. **标题行文案「🐋 鲸鱼管家」≠ 注册 title「Whale Wallet 管家」**：前者是面板内标题行（任务书指定），后者是 SDK floating 卡片注册 title（任务书指定），二者按任务书原文各自保留，未强行统一。
+  3. **删除退役断言后总数不降反升（190→195）**：whale-actor 原本无专属测试文件（退役零断言损失），新增 5 条全为净增；满足"不许有失败"硬约束。
+  4. **moodAccent 颜色取值**：任务书只给语义（灰/蓝/绿/青/黄）未给色值；按项目既有调色板选值（蓝 #3f97de、黄 #e8a13a 沿用原 actor 徽标色，绿/灰沿用 balance-view tone 色），青色 #0891b2 为新增，纯函数映射测试钉死，后续可无风险调整。
+  5. **重建产物与 dist/ 副本**属 build 脚本输出（任务书明确要求重建），未手工编辑。
+  6. 未 commit（按任务约束）；未触碰 docs/design/、INSTALL.md、README.md、tools/build-whale-pet-pack.py、assets/（WP-docs 与主会话所有权）。
+- 未解决问题 / 下一阶段：真机冒烟（面板拖到 Hermes 宠物旁的视觉组合、accent 圆点可读性）待用户配合；upstream 提案（host.pet.say/react/setActivity，HERMES_PET_SYSTEM.md §4-4）落地后面板泡泡可迁移为官方宠物泡泡。
+
+## 2026-10-04 — WP-docs 完成：宠物宿主化文档（DR-15 配套六件套）
+
+### 完成了什么
+
+- **ARCHITECTURE_DECISION.md**：DR 表新增 DR-15（修订 of DR-4 窗口形态目标）行；文末新增「§11 修订 2026-10-04：宠物宿主化（DR-15）」——背景（用户决策：不再自建宠物角色）、候选比较（A 自建角色面板〔放弃：与内置宠物角色重复〕/ B 皮肤包+管家面板〔选定〕/ C monkey-patch 内部 store〔禁止：AGENTS.md §10 + blob ESM import 白名单事实不可达〕/ D upstream API〔未来：已提案不实施〕）、选 B 五条理由、与 DR-1~14 逐条关系表（仅 DR-4 修订）、修订组件图（官方宠物窗口 ←皮肤包；管家面板 ←泡泡/数据/提醒；并列摆位）、皮肤包=用户数据定性（§11.6）、新增待验证项（§11.7）。
+- **FEASIBILITY_REPORT.md**：§3 追加 §3.1 Hermes Pet API upstream 提案——`host.pet.say(lines,{ttl})` / `host.pet.react(kind)` / `host.pet.setActivity(patch)` / `host.pet.getBounds()`；动机附 file:line 证据（SDK 零 pet 导出、泡泡硬编码 pet-bubble.tsx:33-67、姿态纯派生 pet.ts:107、pet RPC 核心内部 tui_gateway/server.py:180，全引 [PET] 调研）；Without it 替代 = 管家面板并列摆位。
+- **INSTALL.md**：新增 §12「宠物皮肤（可选，推荐）」（内置宠物系统说明 / 构建 `tools/build-whale-pet-pack.py` → 用户复制 `assets/whale-pet-pack/` → `D:\hermes\pets\whale\` → 图库选择 → 确认鲸鱼 → 面板拖到宠物旁；`/pet-generate` 替代提示 "cute pixel whale"；回退 = 删目录；与管家面板配合）；§2/§6/§10 三处最小同步（管家面板措辞、去角色化后的素材语义）。
+- **README.md**：项目状态追加 DR-15 轮次说明；功能清单加「宿主角色 = Hermes 内置宠物（鲸鱼皮肤包）」；已实现/未实现/已知限制同步（管家面板去角色化、M10 收窄为音效与面板素材、宠物泡泡不可注入、Phase 2 独立窗由宠物窗承接）；核心目录 research 行补 HERMES_PET_SYSTEM；安装速览表加宠物皮肤行。
+- **REMAINING_WORK.md**：追加 P1-3 宠物宿主化（本轮交付 FIXED；真机宠物装载 NOT VERIFIED 待用户执行）。
+
+### 设计变化 / 与既有决策关系
+
+- DR-15 只修订 DR-4 的窗口形态目标（OS 级常驻角色改由 core 宠物窗承接，pywebview 独立窗降为后备）；DR-1/2/3/5/6/7~14 不变（记账/凭据/泡泡解耦/归一化/生命周期均与角色无关）；DR-10（排除改 Core）重申一致——候选 C 出局、D 仅记录提案不实施。
+- 皮肤包定性为用户数据（非代码）：装 `<HERMES_HOME>/pets/<slug>/`，不进插件代码目录与 catalog SHA 面（§7.3 发布/回收不触碰）；插件运行时零依赖（缺失 = 纯外观回退）；写入 `D:\hermes` 由用户执行（AGENTS.md §0）。
+- 与 WP-ui 并行条目的衔接：管家面板去角色化已由 WP-ui 落地（whale-actor 退役、mood→强调色，node 195 / pytest 188）；本文档层与之对齐（INSTALL §6 验证行、README 已实现措辞均按「管家面板」表述）；WP-ui 未覆盖的 `host.pet.getBounds()` 一并纳入 §3.1 提案（供面板吸附摆位）。
+
+### 测试结果
+
+- 纯文档轮：无代码/测试改动，未构建、未跑测试（不影响 node 195 / pytest 188 基线）；未 commit（任务约束）。
+- 未触碰 `desktop/src`、`desktop/tests`、`tools/`、`assets/`、`plugin-src/`（并行工程师/主会话所有权）。
+
+### 未解决问题 / 下一阶段
+
+- 真机宠物装载三步（复制→图库选择→桌面确认鲸鱼）与「面板拖到宠物旁」视觉组合，待用户执行（INSTALL.md §12）。
+- 皮肤包生成器 `tools/build-whale-pet-pack.py` 与 `assets/whale-pet-pack/` 产物由并行/主会话交付，文档已按既定路径引用；若路径/命名有变需回改 INSTALL §12 与 README。
+- upstream Hermes Pet API 提案跟进（FEASIBILITY_REPORT §3.1）；采纳前宠物泡泡文字不可注入，维持并列摆位。
+
+## 2026-10-04 — 宠物宿主化（DR-15）：内置宠物为角色 + 管家面板
+
+- **调研**（docs/research/HERMES_PET_SYSTEM.md，全部 file:line）：内置宠物 = Python agent/pet/（皮肤包存储 pets/<slug>/ + petdex 目录 + AI 生成管线）+ 桌面 pet/pet-overlay/pet-gallery store（姿态状态机 idle/wave/run/failed/review/jump/waiting 随会话状态派生 + 弹出式透明窗 + 宠物泡泡〔文字硬编码〕）。**SDK 对宠物零导出，唯一合法接口 = 皮肤包文件**。
+- **鲸鱼皮肤包**：tools/build-whale-pet-pack.py（纯 stdlib PNG 编码器 + 参数化像素鲸鱼，9 姿态 × 6 帧，Codex 规格 1536×1872 已断言）→ assets/whale-pet-pack/{pet.json, spritesheet.png}；帧视觉自查通过（experiments/pet-frame-*.png）。安装由用户执行（复制到 D:\hermes\pets\whale\ + 图库选择）。
+- **WP-ui（子代理）**：desktop 去角色化——whale-actor.js 退役，floating pane 改造为「🐋 鲸鱼管家」面板（泡泡层+数据卡+音效+mood 强调色 moodAccent()）；node **195** passed。
+- **WP-docs（子代理）**：ARCHITECTURE_DECISION DR-15 修订（候选比较+组件图+用户数据定性）、FEASIBILITY upstream 提案（host.pet.say/react/setActivity/getBounds）、INSTALL §12 宠物皮肤节、README/REMAINING_WORK 同步。
+- **门禁**：node 195 / pytest 188 / build + 双重安全自检全绿。真机宠物装载 NOT VERIFIED（待用户复制皮肤包并选择）。

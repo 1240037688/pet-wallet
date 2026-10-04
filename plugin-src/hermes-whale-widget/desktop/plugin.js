@@ -2,7 +2,7 @@
 
 // plugin-src/hermes-whale-widget/desktop/src/main.js
 import { STATUSBAR_AREAS, PANES_AREA, atom as atom3, host } from "@hermes/plugin-sdk";
-import { jsx as jsx5 } from "react/jsx-runtime";
+import { jsx as jsx4 } from "react/jsx-runtime";
 
 // plugin-src/hermes-whale-widget/desktop/src/ui/statusbar.js
 import { useValue } from "@hermes/plugin-sdk";
@@ -45,162 +45,172 @@ function renderWhaleChip($health2, $ingest2) {
 
 // plugin-src/hermes-whale-widget/desktop/src/ui/whale-pane.js
 import { useValue as useValue3 } from "@hermes/plugin-sdk";
-import { jsx as jsx4, jsxs as jsxs2 } from "react/jsx-runtime";
+import { jsx as jsx3, jsxs as jsxs2 } from "react/jsx-runtime";
 
-// plugin-src/hermes-whale-widget/desktop/src/ui/whale-actor.js
-import { jsx as jsx2 } from "react/jsx-runtime";
-var MOOD_STYLE = {
-  idle: { transform: "translateY(0px) scale(1)", filter: "none" },
-  press: { transform: "translateY(2px) scale(0.92, 0.86)", filter: "brightness(0.95)" },
-  happy: { transform: "translateY(-4px) scale(1.04)", filter: "brightness(1.06)" },
-  money: { transform: "translateY(-2px) scale(1.02)", filter: "saturate(1.35) brightness(1.05)" },
-  waiting: { transform: "rotate(-6deg) scale(1)", filter: "none" }
-};
-var MOOD_BADGE = { idle: null, press: null, happy: "\u2713", money: "\xA5", waiting: "?" };
-function whaleTransform(mood) {
-  const s = MOOD_STYLE[mood] ?? MOOD_STYLE.idle;
-  return { transform: s.transform, filter: s.filter };
-}
-function whaleBadge(mood) {
-  return MOOD_BADGE[mood] ?? null;
-}
-function WhaleActor({ mood = "idle", size = 84, onPress, onRelease, onClick }) {
-  const fill = mood === "money" ? "#5aa8e8" : mood === "happy" ? "#4fa3e3" : mood === "waiting" ? "#7f9db8" : "#68a5dd";
-  const badge = whaleBadge(mood);
-  return jsx2("div", {
-    className: `whale-actor whale-${mood}`,
-    role: "button",
-    tabIndex: 0,
-    onPointerDown: onPress,
-    onPointerUp: onRelease,
-    onClick,
-    style: {
-      position: "relative",
-      width: size,
-      height: size * 0.72,
-      cursor: "grab",
-      userSelect: "none",
-      transition: "transform 160ms cubic-bezier(.34,1.56,.64,1), filter 160ms ease",
-      ...whaleTransform(mood)
+// plugin-src/hermes-whale-widget/desktop/src/ui/controller.js
+import { atom } from "@hermes/plugin-sdk";
+
+// plugin-src/hermes-whale-widget/desktop/src/core/whale-state.js
+var CLICK_WINDOW_MS = 1200;
+var TRANSIENT_MS = 2500;
+function createWhaleState({
+  now = () => Date.now(),
+  clickWindowMs = CLICK_WINDOW_MS,
+  transientMs = TRANSIENT_MS
+} = {}) {
+  let s = {
+    mood: "idle",
+    clickCount: 0,
+    lastClickAt: 0,
+    transient: null,
+    // { mood, until }
+    waiting: null
+    // { kind: 'question'|'approval', since }
+  };
+  const settle = (ts) => {
+    if (s.transient && ts >= s.transient.until) s.transient = null;
+    s.mood = s.transient ? s.transient.mood : s.waiting ? "waiting" : "idle";
+  };
+  return {
+    /** Pointer down: physical press wins over everything but stays honest. */
+    press() {
+      const ts = now();
+      settle(ts);
+      s.mood = "press";
+      return snapshot(s);
     },
-    children: [
-      jsx2("svg", {
-        key: "svg",
-        viewBox: "0 0 100 72",
-        width: "100%",
-        height: "100%",
-        children: [
-          jsx2("ellipse", { key: "body", cx: "48", cy: "42", rx: "44", ry: "26", fill }),
-          jsx2("path", { key: "tail", d: "M88 40 Q 100 28 96 14 Q 88 30 78 34 Z", fill }),
-          jsx2("path", { key: "fin", d: "M40 46 Q 52 58 62 48 Q 52 44 40 46 Z", fill: "#3d7fb8" }),
-          jsx2("circle", { key: "eye", cx: "26", cy: "36", r: "3.2", fill: "#0d2b45" }),
-          jsx2("path", {
-            key: "mouth",
-            d: mood === "happy" ? "M14 44 Q 22 52 30 44" : "M16 46 Q 22 50 28 46",
-            stroke: "#0d2b45",
-            strokeWidth: "2",
-            fill: "none",
-            strokeLinecap: "round"
-          }),
-          jsx2("path", { key: "spout", d: "M30 14 Q 34 6 40 10", stroke: "#9ed0f2", strokeWidth: "3", fill: "none", strokeLinecap: "round" })
-        ]
-      }),
-      badge ? jsx2("div", {
-        key: "badge",
-        style: {
-          position: "absolute",
-          top: -6,
-          right: -6,
-          width: 18,
-          height: 18,
-          borderRadius: "50%",
-          background: mood === "waiting" ? "#e8a13a" : "#3f97de",
-          color: "#fff",
-          fontSize: 12,
-          lineHeight: "18px",
-          textAlign: "center",
-          fontWeight: 700
-        },
-        children: badge
-      }) : null
-    ]
-  });
-}
-
-// plugin-src/hermes-whale-widget/desktop/src/core/money.js
-var SCALE = 1e8;
-var MAX_UNITS = 2 ** 53 - 1;
-function formatMoney(units, { currency = null, decimals = 2 } = {}) {
-  if (units === null || units === void 0) return "\u2014";
-  const dec = Math.max(0, Math.min(8, decimals));
-  const magnitude = Math.abs(Math.trunc(units));
-  const whole = Math.floor(magnitude / SCALE);
-  const frac = String(magnitude % SCALE).padStart(8, "0").slice(0, dec);
-  const text = `${units < 0 ? "-" : ""}${whole}${dec > 0 ? "." + frac : ""}`;
-  return currency ? `${text} ${currency}` : text;
-}
-
-// plugin-src/hermes-whale-widget/desktop/src/ui/balance-view.js
-function balanceView(balance) {
-  if (!balance) return { text: "\u2014", tone: "unknown", badge: null, hint: "\u7B49\u5F85\u6570\u636E\u2026" };
-  const cred = balance.credential ?? {};
-  if (cred.configured === false) {
-    return { text: "\u2014", tone: "unknown", badge: null, hint: "\u672A\u914D\u7F6E Provider \u51ED\u636E" };
-  }
-  const units = balance.observed_balance_units;
-  switch (balance.state) {
-    case "ok":
-      return { text: formatMoney(units, { currency: balance.currency }), tone: "ok", badge: null, hint: null };
-    case "zero":
-      return { text: formatMoney(0, { currency: balance.currency }), tone: "zero", badge: null, hint: "\u4F59\u989D\u4E3A 0\uFF08API \u5B9E\u6D4B\uFF09" };
-    case "stale":
-      return {
-        text: formatMoney(units, { currency: balance.currency }),
-        tone: "stale",
-        badge: "\u672A\u5237\u65B0",
-        hint: "\u6570\u636E\u5DF2\u8FC7\u671F\uFF08\u4E0A\u6B21\u83B7\u53D6\u89C1\u65F6\u95F4\u6233\uFF09"
-      };
-    case "error":
-      return {
-        text: formatMoney(units, { currency: balance.currency }),
-        tone: "error",
-        badge: "\u83B7\u53D6\u5931\u8D25",
-        hint: `\u4F59\u989D API \u51FA\u9519\uFF08${balance.error?.kind ?? "error"}\uFF09\uFF1B\u663E\u793A\u6700\u8FD1\u4E00\u6B21\u5DF2\u77E5\u503C`
-      };
-    default:
-      return { text: "\u2014", tone: "unknown", badge: null, hint: "\u72B6\u6001\u672A\u77E5" };
-  }
-}
-function todayView(summary) {
-  if (!summary) return { text: "\u2014", estimated: true, turns: 0, hint: null };
-  return {
-    text: formatMoney(summary.estimated_today_units, { currency: todayCurrency(summary) }),
-    estimated: true,
-    turns: summary.turns_today ?? 0,
-    hint: summary.unpriced_today > 0 ? `\u53E6\u6709 ${summary.unpriced_today} \u8F6E\u672A\u8BA1\u4EF7` : null
+    release() {
+      const ts = now();
+      settle(ts);
+      return snapshot(s);
+    },
+    /** Primary interaction: combo counting + immediate acknowledgement. */
+    click() {
+      const ts = now();
+      s.clickCount = ts - s.lastClickAt <= clickWindowMs ? s.clickCount + 1 : 1;
+      s.lastClickAt = ts;
+      settle(ts);
+      return { ...snapshot(s), clickCount: s.clickCount, combo: s.clickCount };
+    },
+    /** Normalized whale event in; returns the new snapshot. */
+    event(kind) {
+      const ts = now();
+      switch (kind) {
+        case "TASK_COMPLETED":
+          s.transient = { mood: "happy", until: ts + transientMs };
+          break;
+        case "USAGE_UPDATED":
+          s.transient = { mood: "money", until: ts + transientMs };
+          break;
+        case "USER_INPUT_REQUIRED":
+          s.waiting = { kind: "question", since: ts };
+          break;
+        case "APPROVAL_REQUIRED":
+          s.waiting = { kind: "approval", since: ts };
+          break;
+        case "APPROVAL_CLEARED":
+        case "USER_INPUT_CLEARED":
+          s.waiting = null;
+          break;
+        case "ERROR":
+          s.waiting = null;
+          break;
+        default:
+          break;
+      }
+      settle(ts);
+      return snapshot(s);
+    },
+    /** Periodic settle (timers): expire transient, resolve waiting/idle. */
+    tick() {
+      const ts = now();
+      settle(ts);
+      return snapshot(s);
+    },
+    snapshot() {
+      return snapshot(s);
+    }
   };
 }
-function todayCurrency(summary) {
-  const buckets = summary?.estimated_today ?? summary?.cost_buckets ?? [];
-  const first = Array.isArray(buckets) ? buckets[0] : null;
-  return first?.currency ?? null;
-}
-function salvageView(focusedUsage) {
-  if (!focusedUsage) return null;
-  const input = focusedUsage.input ?? focusedUsage.input_tokens ?? null;
-  const output = focusedUsage.output ?? focusedUsage.output_tokens ?? null;
-  if (input === null && output === null) return null;
-  return {
-    text: `\u672C\u4F1A\u8BDD tokens: ${input ?? "\u2014"} \u5165 / ${output ?? "\u2014"} \u51FA`,
-    estimated: false,
-    badge: "\u672A\u8BB0\u8D26",
-    hint: "\u8BB0\u8D26\u540E\u7AEF\u4E0D\u53EF\u8FBE\uFF1B\u4EC5\u663E\u793A\u4F1A\u8BDD token \u5FEB\u7167\uFF08\u65E0\u6CD5\u8BA1\u4EF7\uFF09"
-  };
+function snapshot(s) {
+  return { mood: s.mood, clickCount: s.clickCount, waiting: s.waiting ? s.waiting.kind : null };
 }
 
-// plugin-src/hermes-whale-widget/desktop/src/ui/bubble/renderer.js
-import { useValue as useValue2 } from "@hermes/plugin-sdk";
-import { jsx as jsx3, jsxs } from "react/jsx-runtime";
+// plugin-src/hermes-whale-widget/desktop/src/ui/bubble/queue.js
+var RANKS = { budget: 1, balance_low: 2, turn_cost: 3, waiting: 4, info: 5 };
+function createBubbleQueue({ now = () => Date.now() } = {}) {
+  let items = /* @__PURE__ */ new Map();
+  function sweep(ts) {
+    items = new Map(
+      [...items].filter(([, it]) => it.sticky || it.ttl_ms === 0 || ts < it.shown_at + it.ttl_ms)
+    );
+  }
+  function topItem(ts) {
+    sweep(ts);
+    let best = null;
+    for (const it of items.values()) {
+      if (!best || it.rank < best.rank) best = it;
+    }
+    return best;
+  }
+  return {
+    /**
+     * Put/refresh a bubble. `def` is a validated Bubble definition; `data`
+     * the resolver snapshot; `ttlMs=0` + `sticky` = persists until dismissed.
+     */
+    show({ key, kind = "info", def, data = {}, ttlMs = 5e3, sticky = false }) {
+      const rank = RANKS[kind] ?? RANKS.info;
+      const existed = items.get(key);
+      items.set(key, {
+        key,
+        rank,
+        kind,
+        def,
+        data,
+        ttl_ms: sticky ? 0 : ttlMs,
+        sticky: sticky || kind === "waiting",
+        shown_at: existed ? existed.shown_at : now(),
+        stepIndex: existed ? existed.stepIndex : 0
+      });
+      return this.view();
+    },
+    /** Tap advance on the visible bubble (tapAdvance definitions only). */
+    advance() {
+      const ts = now();
+      const top = topItem(ts);
+      if (!top || !top.def?.tapAdvance) return null;
+      top.stepIndex = (top.stepIndex + 1) % top.def.items.length;
+      top.shown_at = ts;
+      return this.view();
+    },
+    /** Dismiss by key (or the visible one when key omitted). */
+    dismiss(key) {
+      const ts = now();
+      if (key === void 0) {
+        const top = topItem(ts);
+        if (top) items.delete(top.key);
+      } else {
+        items.delete(key);
+      }
+      return this.view();
+    },
+    /** Current visible render input: {key, kind, rank, step, stepIndex} | null. */
+    view() {
+      const ts = now();
+      const top = topItem(ts);
+      if (!top) return null;
+      return { key: top.key, kind: top.kind, rank: top.rank, stepIndex: top.stepIndex, def: top.def, data: top.data };
+    },
+    /** All pending (dismiss/observe surface; tests). */
+    pending() {
+      sweep(now());
+      return [...items.values()].map(({ key, kind, rank }) => ({ key, kind, rank }));
+    },
+    clear() {
+      items = /* @__PURE__ */ new Map();
+    }
+  };
+}
 
 // plugin-src/hermes-whale-widget/desktop/src/ui/bubble/schema.js
 var BUBBLE_SCHEMA_VERSION = 1;
@@ -398,315 +408,17 @@ function fmt(value) {
   return value === null || value === void 0 ? "\u2014" : String(value);
 }
 
-// plugin-src/hermes-whale-widget/desktop/src/ui/bubble/renderer.js
-function moduleStyle(style) {
-  const css = {};
-  if (!style) return css;
-  if (style.font) css.fontFamily = style.font;
-  if (style.size) css.fontSize = typeof style.size === "number" ? `${style.size}px` : style.size;
-  if (style.bold !== void 0) css.fontWeight = style.bold ? 700 : 400;
-  if (style.italic) css.fontStyle = "italic";
-  if (style.underline) css.textDecoration = "underline";
-  if (style.color) css.color = style.color;
-  if (style.background) css.background = style.background;
-  return css;
-}
-function ModuleView({ mod }) {
-  if (mod.type === "image") {
-    return jsx3("div", {
-      style: {
-        width: "100%",
-        minHeight: 40,
-        borderRadius: 8,
-        background: "repeating-linear-gradient(45deg, #e8f1fb, #e8f1fb 6px, #d5e7f8 6px, #d5e7f8 12px)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: "#5b7fa6",
-        fontSize: 10
-      },
-      children: `image: ${mod.ref} (M10)`
-    });
-  }
-  return jsx3("span", {
-    style: { whiteSpace: "pre-wrap", ...moduleStyle(mod.style) },
-    children: mod.text ?? "\u2014"
-  });
-}
-function PageView({ page }) {
-  return jsx3("div", {
-    style: { display: "flex", flexDirection: "column", gap: 2 },
-    children: page.rows.map(
-      (row, i) => jsx3("div", { key: i, style: { display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }, children: row.modules.map((mod, j) => jsx3(ModuleView, { key: j, mod })) }, void 0)
-    )
-  });
-}
-function BubbleLayer({ model }) {
-  if (!model || !model.def) return null;
-  const resolver = createResolver();
-  let page;
-  try {
-    page = resolver.resolve(model.def, { stepIndex: model.stepIndex, data: model.data });
-  } catch {
-    return null;
-  }
-  return jsx3("div", {
-    className: "whale-bubble",
-    style: {
-      maxWidth: 260,
-      padding: "8px 10px",
-      borderRadius: 12,
-      background: "#ffffff",
-      boxShadow: "0 4px 14px rgba(15, 43, 69, 0.18)",
-      border: "1px solid #d8e6f3",
-      fontSize: 12,
-      color: "#25384c"
-    },
-    children: jsx3(PageView, { page })
-  });
-}
-
-// plugin-src/hermes-whale-widget/desktop/src/ui/whale-pane.js
-var PANE_ID = "whale-widget-pane";
-function toneColor(tone) {
-  switch (tone) {
-    case "ok":
-      return "#2e7d32";
-    case "zero":
-      return "#6b7280";
-    case "stale":
-      return "#9a8c1f";
-    case "error":
-      return "#b3261e";
-    default:
-      return "#5b6472";
-  }
-}
-function DataCard({ $balance: $balance2, $summary: $summary2, $dashboard: $dashboard2 }) {
-  const balance = useValue3($balance2);
-  const summary = useValue3($summary2);
-  const dashboard = useValue3($dashboard2);
-  const unreachable = dashboard?.state === "unreachable";
-  const bv = balanceView(unreachable ? null : balance);
-  const tv = unreachable ? salvageView(null) : todayView(summary);
-  const todayText = tv ? tv.text : "\u2014";
-  return jsxs2("div", {
-    style: { display: "flex", flexDirection: "column", gap: 6, fontSize: 12 },
-    children: [
-      jsx4("div", {
-        style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 },
-        title: bv.hint ?? void 0,
-        children: [
-          jsx4("span", { key: "k", style: { color: "#5b6472" }, children: "\u4F59\u989D" }),
-          jsxs2("span", {
-            key: "v",
-            style: { fontWeight: 600, color: toneColor(bv.tone) },
-            children: [bv.text, bv.badge ? ` \u26A0${bv.badge}` : ""]
-          })
-        ]
-      }),
-      jsx4("div", {
-        style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 },
-        title: tv?.hint ?? void 0,
-        children: [
-          jsx4("span", { key: "k", style: { color: "#5b6472" }, children: "\u4ECA\u65E5" }),
-          jsxs2("span", {
-            key: "v",
-            style: { fontWeight: 600, color: "#333c48" },
-            children: [
-              todayText,
-              tv?.estimated ? jsx4("span", { key: "b", style: { marginLeft: 4, fontSize: 10, padding: "1px 4px", borderRadius: 4, background: "#e8f1fb", color: "#3f6f9f" }, children: "\u4F30\u7B97" }) : null,
-              unreachable && tv ? jsx4("span", { key: "u", style: { marginLeft: 4, fontSize: 10, padding: "1px 4px", borderRadius: 4, background: "#fdeaea", color: "#b3261e" }, children: tv.badge ?? "\u672A\u8BB0\u8D26" }) : null
-            ]
-          })
-        ]
-      }),
-      jsx4("div", { style: { color: "#8a93a1", fontSize: 10 }, children: unreachable ? "\u8BB0\u8D26\u540E\u7AEF\u4E0D\u53EF\u8FBE \u2014 \u663E\u793A\u4F1A\u8BDD\u5FEB\u7167" : `turns today: ${tv?.turns ?? 0}` })
-    ]
-  });
-}
-function WhalePane({ $balance: $balance2, $summary: $summary2, $dashboard: $dashboard2, $whale: $whale2, $bubble: $bubble2, controller }) {
-  const whale = useValue3($whale2);
-  const bubble = useValue3($bubble2);
-  return jsxs2("div", {
-    className: "whale-widget-pane",
-    style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: 8 },
-    children: [
-      jsx4(BubbleLayer, { model: bubble }),
-      jsx4(WhaleActor, {
-        mood: whale.mood,
-        onPress: () => controller.press(),
-        onRelease: () => controller.release(),
-        onClick: () => controller.click()
-      }),
-      jsx4(DataCard, { $balance: $balance2, $summary: $summary2, $dashboard: $dashboard2 })
-    ]
-  });
-}
-
-// plugin-src/hermes-whale-widget/desktop/src/ui/controller.js
-import { atom } from "@hermes/plugin-sdk";
-
-// plugin-src/hermes-whale-widget/desktop/src/core/whale-state.js
-var CLICK_WINDOW_MS = 1200;
-var TRANSIENT_MS = 2500;
-function createWhaleState({
-  now = () => Date.now(),
-  clickWindowMs = CLICK_WINDOW_MS,
-  transientMs = TRANSIENT_MS
-} = {}) {
-  let s = {
-    mood: "idle",
-    clickCount: 0,
-    lastClickAt: 0,
-    transient: null,
-    // { mood, until }
-    waiting: null
-    // { kind: 'question'|'approval', since }
-  };
-  const settle = (ts) => {
-    if (s.transient && ts >= s.transient.until) s.transient = null;
-    s.mood = s.transient ? s.transient.mood : s.waiting ? "waiting" : "idle";
-  };
-  return {
-    /** Pointer down: physical press wins over everything but stays honest. */
-    press() {
-      const ts = now();
-      settle(ts);
-      s.mood = "press";
-      return snapshot(s);
-    },
-    release() {
-      const ts = now();
-      settle(ts);
-      return snapshot(s);
-    },
-    /** Primary interaction: combo counting + immediate acknowledgement. */
-    click() {
-      const ts = now();
-      s.clickCount = ts - s.lastClickAt <= clickWindowMs ? s.clickCount + 1 : 1;
-      s.lastClickAt = ts;
-      settle(ts);
-      return { ...snapshot(s), clickCount: s.clickCount, combo: s.clickCount };
-    },
-    /** Normalized whale event in; returns the new snapshot. */
-    event(kind) {
-      const ts = now();
-      switch (kind) {
-        case "TASK_COMPLETED":
-          s.transient = { mood: "happy", until: ts + transientMs };
-          break;
-        case "USAGE_UPDATED":
-          s.transient = { mood: "money", until: ts + transientMs };
-          break;
-        case "USER_INPUT_REQUIRED":
-          s.waiting = { kind: "question", since: ts };
-          break;
-        case "APPROVAL_REQUIRED":
-          s.waiting = { kind: "approval", since: ts };
-          break;
-        case "APPROVAL_CLEARED":
-        case "USER_INPUT_CLEARED":
-          s.waiting = null;
-          break;
-        case "ERROR":
-          s.waiting = null;
-          break;
-        default:
-          break;
-      }
-      settle(ts);
-      return snapshot(s);
-    },
-    /** Periodic settle (timers): expire transient, resolve waiting/idle. */
-    tick() {
-      const ts = now();
-      settle(ts);
-      return snapshot(s);
-    },
-    snapshot() {
-      return snapshot(s);
-    }
-  };
-}
-function snapshot(s) {
-  return { mood: s.mood, clickCount: s.clickCount, waiting: s.waiting ? s.waiting.kind : null };
-}
-
-// plugin-src/hermes-whale-widget/desktop/src/ui/bubble/queue.js
-var RANKS = { budget: 1, balance_low: 2, turn_cost: 3, waiting: 4, info: 5 };
-function createBubbleQueue({ now = () => Date.now() } = {}) {
-  let items = /* @__PURE__ */ new Map();
-  function sweep(ts) {
-    items = new Map(
-      [...items].filter(([, it]) => it.sticky || it.ttl_ms === 0 || ts < it.shown_at + it.ttl_ms)
-    );
-  }
-  function topItem(ts) {
-    sweep(ts);
-    let best = null;
-    for (const it of items.values()) {
-      if (!best || it.rank < best.rank) best = it;
-    }
-    return best;
-  }
-  return {
-    /**
-     * Put/refresh a bubble. `def` is a validated Bubble definition; `data`
-     * the resolver snapshot; `ttlMs=0` + `sticky` = persists until dismissed.
-     */
-    show({ key, kind = "info", def, data = {}, ttlMs = 5e3, sticky = false }) {
-      const rank = RANKS[kind] ?? RANKS.info;
-      const existed = items.get(key);
-      items.set(key, {
-        key,
-        rank,
-        kind,
-        def,
-        data,
-        ttl_ms: sticky ? 0 : ttlMs,
-        sticky: sticky || kind === "waiting",
-        shown_at: existed ? existed.shown_at : now(),
-        stepIndex: existed ? existed.stepIndex : 0
-      });
-      return this.view();
-    },
-    /** Tap advance on the visible bubble (tapAdvance definitions only). */
-    advance() {
-      const ts = now();
-      const top = topItem(ts);
-      if (!top || !top.def?.tapAdvance) return null;
-      top.stepIndex = (top.stepIndex + 1) % top.def.items.length;
-      top.shown_at = ts;
-      return this.view();
-    },
-    /** Dismiss by key (or the visible one when key omitted). */
-    dismiss(key) {
-      const ts = now();
-      if (key === void 0) {
-        const top = topItem(ts);
-        if (top) items.delete(top.key);
-      } else {
-        items.delete(key);
-      }
-      return this.view();
-    },
-    /** Current visible render input: {key, kind, rank, step, stepIndex} | null. */
-    view() {
-      const ts = now();
-      const top = topItem(ts);
-      if (!top) return null;
-      return { key: top.key, kind: top.kind, rank: top.rank, stepIndex: top.stepIndex, def: top.def, data: top.data };
-    },
-    /** All pending (dismiss/observe surface; tests). */
-    pending() {
-      sweep(now());
-      return [...items.values()].map(({ key, kind, rank }) => ({ key, kind, rank }));
-    },
-    clear() {
-      items = /* @__PURE__ */ new Map();
-    }
-  };
+// plugin-src/hermes-whale-widget/desktop/src/core/money.js
+var SCALE = 1e8;
+var MAX_UNITS = 2 ** 53 - 1;
+function formatMoney(units, { currency = null, decimals = 2 } = {}) {
+  if (units === null || units === void 0) return "\u2014";
+  const dec = Math.max(0, Math.min(8, decimals));
+  const magnitude = Math.abs(Math.trunc(units));
+  const whole = Math.floor(magnitude / SCALE);
+  const frac = String(magnitude % SCALE).padStart(8, "0").slice(0, dec);
+  const text = `${units < 0 ? "-" : ""}${whole}${dec > 0 ? "." + frac : ""}`;
+  return currency ? `${text} ${currency}` : text;
 }
 
 // plugin-src/hermes-whale-widget/desktop/src/ui/bubble/defaults.js
@@ -791,6 +503,16 @@ var DEFAULT_BALANCE_LOW = validateBubble({
 
 // plugin-src/hermes-whale-widget/desktop/src/ui/controller.js
 var NOTIFICATION_KINDS = { budget: "budget", balance_low: "balance_low", turn_cost: "turn_cost" };
+var MOOD_ACCENT = {
+  idle: "#6b7280",
+  press: "#3f97de",
+  happy: "#2e7d32",
+  money: "#0891b2",
+  waiting: "#e8a13a"
+};
+function moodAccent(mood) {
+  return MOOD_ACCENT[mood] ?? MOOD_ACCENT.idle;
+}
 var $whale = atom({ mood: "idle", clickCount: 0, waiting: null });
 var $bubble = atom(null);
 function notificationData(kind, payload) {
@@ -963,6 +685,252 @@ function createWhaleController({
       return machine.snapshot();
     }
   };
+}
+
+// plugin-src/hermes-whale-widget/desktop/src/ui/balance-view.js
+function balanceView(balance) {
+  if (!balance) return { text: "\u2014", tone: "unknown", badge: null, hint: "\u7B49\u5F85\u6570\u636E\u2026" };
+  const cred = balance.credential ?? {};
+  if (cred.configured === false) {
+    return { text: "\u2014", tone: "unknown", badge: null, hint: "\u672A\u914D\u7F6E Provider \u51ED\u636E" };
+  }
+  const units = balance.observed_balance_units;
+  switch (balance.state) {
+    case "ok":
+      return { text: formatMoney(units, { currency: balance.currency }), tone: "ok", badge: null, hint: null };
+    case "zero":
+      return { text: formatMoney(0, { currency: balance.currency }), tone: "zero", badge: null, hint: "\u4F59\u989D\u4E3A 0\uFF08API \u5B9E\u6D4B\uFF09" };
+    case "stale":
+      return {
+        text: formatMoney(units, { currency: balance.currency }),
+        tone: "stale",
+        badge: "\u672A\u5237\u65B0",
+        hint: "\u6570\u636E\u5DF2\u8FC7\u671F\uFF08\u4E0A\u6B21\u83B7\u53D6\u89C1\u65F6\u95F4\u6233\uFF09"
+      };
+    case "error":
+      return {
+        text: formatMoney(units, { currency: balance.currency }),
+        tone: "error",
+        badge: "\u83B7\u53D6\u5931\u8D25",
+        hint: `\u4F59\u989D API \u51FA\u9519\uFF08${balance.error?.kind ?? "error"}\uFF09\uFF1B\u663E\u793A\u6700\u8FD1\u4E00\u6B21\u5DF2\u77E5\u503C`
+      };
+    default:
+      return { text: "\u2014", tone: "unknown", badge: null, hint: "\u72B6\u6001\u672A\u77E5" };
+  }
+}
+function todayView(summary) {
+  if (!summary) return { text: "\u2014", estimated: true, turns: 0, hint: null };
+  return {
+    text: formatMoney(summary.estimated_today_units, { currency: todayCurrency(summary) }),
+    estimated: true,
+    turns: summary.turns_today ?? 0,
+    hint: summary.unpriced_today > 0 ? `\u53E6\u6709 ${summary.unpriced_today} \u8F6E\u672A\u8BA1\u4EF7` : null
+  };
+}
+function todayCurrency(summary) {
+  const buckets = summary?.estimated_today ?? summary?.cost_buckets ?? [];
+  const first = Array.isArray(buckets) ? buckets[0] : null;
+  return first?.currency ?? null;
+}
+function salvageView(focusedUsage) {
+  if (!focusedUsage) return null;
+  const input = focusedUsage.input ?? focusedUsage.input_tokens ?? null;
+  const output = focusedUsage.output ?? focusedUsage.output_tokens ?? null;
+  if (input === null && output === null) return null;
+  return {
+    text: `\u672C\u4F1A\u8BDD tokens: ${input ?? "\u2014"} \u5165 / ${output ?? "\u2014"} \u51FA`,
+    estimated: false,
+    badge: "\u672A\u8BB0\u8D26",
+    hint: "\u8BB0\u8D26\u540E\u7AEF\u4E0D\u53EF\u8FBE\uFF1B\u4EC5\u663E\u793A\u4F1A\u8BDD token \u5FEB\u7167\uFF08\u65E0\u6CD5\u8BA1\u4EF7\uFF09"
+  };
+}
+
+// plugin-src/hermes-whale-widget/desktop/src/ui/bubble/renderer.js
+import { useValue as useValue2 } from "@hermes/plugin-sdk";
+import { jsx as jsx2, jsxs } from "react/jsx-runtime";
+function moduleStyle(style) {
+  const css = {};
+  if (!style) return css;
+  if (style.font) css.fontFamily = style.font;
+  if (style.size) css.fontSize = typeof style.size === "number" ? `${style.size}px` : style.size;
+  if (style.bold !== void 0) css.fontWeight = style.bold ? 700 : 400;
+  if (style.italic) css.fontStyle = "italic";
+  if (style.underline) css.textDecoration = "underline";
+  if (style.color) css.color = style.color;
+  if (style.background) css.background = style.background;
+  return css;
+}
+function ModuleView({ mod }) {
+  if (mod.type === "image") {
+    return jsx2("div", {
+      style: {
+        width: "100%",
+        minHeight: 40,
+        borderRadius: 8,
+        background: "repeating-linear-gradient(45deg, #e8f1fb, #e8f1fb 6px, #d5e7f8 6px, #d5e7f8 12px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "#5b7fa6",
+        fontSize: 10
+      },
+      children: `image: ${mod.ref} (M10)`
+    });
+  }
+  return jsx2("span", {
+    style: { whiteSpace: "pre-wrap", ...moduleStyle(mod.style) },
+    children: mod.text ?? "\u2014"
+  });
+}
+function PageView({ page }) {
+  return jsx2("div", {
+    style: { display: "flex", flexDirection: "column", gap: 2 },
+    children: page.rows.map(
+      (row, i) => jsx2("div", { key: i, style: { display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }, children: row.modules.map((mod, j) => jsx2(ModuleView, { key: j, mod })) }, void 0)
+    )
+  });
+}
+function BubbleLayer({ model }) {
+  if (!model || !model.def) return null;
+  const resolver = createResolver();
+  let page;
+  try {
+    page = resolver.resolve(model.def, { stepIndex: model.stepIndex, data: model.data });
+  } catch {
+    return null;
+  }
+  return jsx2("div", {
+    className: "whale-bubble",
+    style: {
+      maxWidth: 260,
+      padding: "8px 10px",
+      borderRadius: 12,
+      background: "#ffffff",
+      boxShadow: "0 4px 14px rgba(15, 43, 69, 0.18)",
+      border: "1px solid #d8e6f3",
+      fontSize: 12,
+      color: "#25384c"
+    },
+    children: jsx2(PageView, { page })
+  });
+}
+
+// plugin-src/hermes-whale-widget/desktop/src/ui/whale-pane.js
+var PANE_ID = "whale-widget-pane";
+var PANE_HINT = "\u89D2\u8272\u7531 Hermes \u5185\u7F6E\u5BA0\u7269\u627F\u8F7D\uFF08\u89C1 docs/research/HERMES_PET_SYSTEM.md\uFF09\uFF1B\u672C\u9762\u677F\u662F\u5176\u968F\u8EAB\u8D26\u672C\uFF0C\u5EFA\u8BAE\u62D6\u5230\u5BA0\u7269\u65C1\u3002\u70B9\u51FB\u9762\u677F\u4E0E\u5B83\u4E92\u52A8\uFF08\u6CE1\u6CE1 + \u97F3\u6548\uFF09\u3002";
+function toneColor(tone) {
+  switch (tone) {
+    case "ok":
+      return "#2e7d32";
+    case "zero":
+      return "#6b7280";
+    case "stale":
+      return "#9a8c1f";
+    case "error":
+      return "#b3261e";
+    default:
+      return "#5b6472";
+  }
+}
+function HeaderRow({ mood }) {
+  return jsxs2("div", {
+    className: "whale-pane-header",
+    title: PANE_HINT,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      alignSelf: "stretch",
+      fontSize: 12,
+      fontWeight: 600,
+      color: "#25384c"
+    },
+    children: [
+      jsx3("span", { key: "t", children: "\u{1F40B} \u9CB8\u9C7C\u7BA1\u5BB6" }),
+      jsx3("span", {
+        key: "dot",
+        "data-mood": mood,
+        role: "img",
+        "aria-label": `mood: ${mood}`,
+        style: {
+          width: 8,
+          height: 8,
+          borderRadius: "50%",
+          flexShrink: 0,
+          background: moodAccent(mood),
+          transition: "background 160ms ease"
+        }
+      })
+    ]
+  });
+}
+function DataCard({ $balance: $balance2, $summary: $summary2, $dashboard: $dashboard2 }) {
+  const balance = useValue3($balance2);
+  const summary = useValue3($summary2);
+  const dashboard = useValue3($dashboard2);
+  const unreachable = dashboard?.state === "unreachable";
+  const bv = balanceView(unreachable ? null : balance);
+  const tv = unreachable ? salvageView(null) : todayView(summary);
+  const todayText = tv ? tv.text : "\u2014";
+  return jsxs2("div", {
+    style: { display: "flex", flexDirection: "column", gap: 6, fontSize: 12 },
+    children: [
+      jsx3("div", {
+        style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 },
+        title: bv.hint ?? void 0,
+        children: [
+          jsx3("span", { key: "k", style: { color: "#5b6472" }, children: "\u4F59\u989D" }),
+          jsxs2("span", {
+            key: "v",
+            style: { fontWeight: 600, color: toneColor(bv.tone) },
+            children: [bv.text, bv.badge ? ` \u26A0${bv.badge}` : ""]
+          })
+        ]
+      }),
+      jsx3("div", {
+        style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 },
+        title: tv?.hint ?? void 0,
+        children: [
+          jsx3("span", { key: "k", style: { color: "#5b6472" }, children: "\u4ECA\u65E5" }),
+          jsxs2("span", {
+            key: "v",
+            style: { fontWeight: 600, color: "#333c48" },
+            children: [
+              todayText,
+              tv?.estimated ? jsx3("span", { key: "b", style: { marginLeft: 4, fontSize: 10, padding: "1px 4px", borderRadius: 4, background: "#e8f1fb", color: "#3f6f9f" }, children: "\u4F30\u7B97" }) : null,
+              unreachable && tv ? jsx3("span", { key: "u", style: { marginLeft: 4, fontSize: 10, padding: "1px 4px", borderRadius: 4, background: "#fdeaea", color: "#b3261e" }, children: tv.badge ?? "\u672A\u8BB0\u8D26" }) : null
+            ]
+          })
+        ]
+      }),
+      jsx3("div", { style: { color: "#8a93a1", fontSize: 10 }, children: unreachable ? "\u8BB0\u8D26\u540E\u7AEF\u4E0D\u53EF\u8FBE \u2014 \u663E\u793A\u4F1A\u8BDD\u5FEB\u7167" : `turns today: ${tv?.turns ?? 0}` })
+    ]
+  });
+}
+function WhalePane({ $balance: $balance2, $summary: $summary2, $dashboard: $dashboard2, $whale: $whale2, $bubble: $bubble2, controller }) {
+  const whale = useValue3($whale2);
+  const bubble = useValue3($bubble2);
+  return jsxs2("div", {
+    className: "whale-widget-pane",
+    role: "button",
+    tabIndex: 0,
+    onPointerDown: () => controller.press(),
+    onPointerUp: () => controller.release(),
+    onClick: () => controller.click(),
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      gap: 10,
+      padding: 8,
+      userSelect: "none"
+    },
+    children: [
+      jsx3(HeaderRow, { mood: whale.mood }),
+      jsx3(BubbleLayer, { model: bubble }),
+      jsx3(DataCard, { $balance: $balance2, $summary: $summary2, $dashboard: $dashboard2 })
+    ]
+  });
 }
 
 // plugin-src/hermes-whale-widget/desktop/src/core/data-service.js
@@ -2002,10 +1970,10 @@ var main_default = {
     ctx.register({
       id: PANE_ID,
       area: PANES_AREA,
-      title: "Whale Widget",
+      title: "Whale Wallet \u7BA1\u5BB6",
       order: 0,
       data: { placement: "floating", anchor: "bottom-right", width: "280px" },
-      render: () => jsx5(WhalePane, { $balance, $summary, $dashboard, $whale, $bubble, controller })
+      render: () => jsx4(WhalePane, { $balance, $summary, $dashboard, $whale, $bubble, controller })
     });
     ctx.register({
       id: "chip",
@@ -2014,7 +1982,7 @@ var main_default = {
       render: () => renderWhaleChip($health, $ingest)
     });
     try {
-      host.notify?.({ message: "Whale widget loaded (usage capture \u2192 ledger ingest + whale pane)" });
+      host.notify?.({ message: "Whale Wallet \u7BA1\u5BB6\u5DF2\u52A0\u8F7D\uFF08\u89D2\u8272 = Hermes \u5185\u7F6E\u5BA0\u7269\uFF1Busage capture \u2192 ledger ingest + \u968F\u8EAB\u8D26\u672C\u9762\u677F\uFF09" });
     } catch {
     }
   }

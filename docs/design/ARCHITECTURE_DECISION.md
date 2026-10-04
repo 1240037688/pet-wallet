@@ -275,6 +275,7 @@ JS 半体只见：{credential_id, name, configured, source}（AGENTS.md §7）
 | DR-12 | **日键用本地时区**（DSH 为北京时间系 DeepSeek 峰谷价特定需求）；币种跳变重置基准不记差值；不自动折算汇率 | 本项目不绑 DeepSeek 时段；诚实分账优于黑盒折算 | [DM] §1.2/§5.2；[DSH] A2 教训 |
 | DR-13 | **落库唯一入口 = `message.complete`**；`session.usage` 心跳只进内存；dedup_key = 内容哈希 + (session, day, minute) 分桶 + 本地 turn 序号；watermark 落库 + 计数器重置检测 | Hermes 无稳定事件/turn ID，ticker 停表保证 complete 是权威终值；心跳落库违反 AGENTS.md §8 | [DM] §3；`server.py:3451-3475, 2393`；[DSH] A3 |
 | DR-14 | **通知去重持久化**（budget 按日、balance_low 边沿迟滞、wait 按挂起 id），优于 DSH 的内存/刷新重响语义 | Python 半体有 DB，去重成本为零；重载不重响是明确更好的行为 | [DM] §2.10；[DSH] D1 |
+| DR-15 | **宿主角色 = Hermes 内置宠物（穿鲸鱼皮肤包）+ whale 管家面板（去角色化）**（修订 of DR-4 的窗口形态目标） | 宠物侧插件唯一合法接口 = 皮肤包文件（SDK 零 pet 导出）；core 宠物窗 = 零进程管理成本的 OS 级常驻角色；busy→run / awaiting→waiting 官方语义对齐，无需注入 | §11 修订节；[PET]（docs/research/HERMES_PET_SYSTEM.md）§2-§4 |
 
 ### 未决/待验证清单（移交 FEASIBILITY_REPORT）
 
@@ -283,3 +284,81 @@ JS 半体只见：{credential_id, name, configured, source}（AGENTS.md §7）
 3. 本机 Hermes 的鉴权模式（local token vs OAuth）对 `ctx.socket` 可用性的影响（[AUDIT] §12 标注未验证）。
 4. `session_model_usage` 在未来版本的字段稳定性（轨③门的已知集随冒烟清单更新）。
 5. DPAPI/凭据文件加密在 Python 侧的可行方案（§6，未验证）。
+
+---
+
+## 11. 修订 2026-10-04：宠物宿主化（DR-15）
+
+> 修订依据：用户决策（**不再自建宠物角色**）+ 新事实 `docs/research/HERMES_PET_SYSTEM.md`（下称 **[PET]**，2026-10-04，本机 v0.21.5 源码只读核查，file:line 全附）。
+> 遵守本文修订规则（§10）：只增不改——§1-§10 与 DR-1~14 保留历史原状，与 DR-15 的逐条关系见 §11.4。
+
+### 11.1 背景（用户决策）
+
+Hermes 桌面已内置宠物子系统（皮肤包 + 图库 petdex + 独立透明置顶窗 + 姿态状态机，[PET] §1-§2）。继续自建角色（DR-4 Phase 1 现状的 SVG 鲸鱼）会与之形成「双宠物」角色重复，且自建素材链（M10）长期缺位。用户决策：宿主角色改为 **Hermes 内置宠物（穿鲸鱼皮肤包）+ whale 管家面板（floating pane 去角色化）**。
+
+### 11.2 候选比较
+
+| 候选 | 内容 | 结论 |
+|---|---|---|
+| A 自建角色面板（现状） | floating pane 内自建 SVG 鲸鱼 + 泡泡（DR-4 Phase 1 现状；M10 正式素材未完成，占位 SVG 简陋） | 放弃：与内置宠物系统角色重复；自建素材成本高、DSH 素材不可复用（[REF] §G） |
+| **B 宠物皮肤包 + 管家面板（选定）** | 官方宠物穿鲸鱼皮肤包（`<HERMES_HOME>/pets/<slug>/` 自动发现、无需注册，[PET] §2——**唯一合法接口 = 皮肤包文件**）；管家面板去角色化，只承载泡泡/数据/提醒/音效 | 见 §11.3 |
+| C monkey-patch 内部 store | patch `store/pet.ts` / `pet-overlay.ts` 的 atom/组件，向宠物泡泡注入文案或触发反应 | **禁止**：违反 AGENTS.md §10（禁 monkey patch Hermes 内部对象）与 C1；且事实上不可达——插件是渲染进程 blob ESM、import 白名单，core 内部 store 不在面内（[PET] §3） |
+| D upstream API（`host.pet.*`） | 官方插件面驱动宠物泡泡/反应/姿态 | 未来项：当前版本 SDK 对宠物零导出（[PET] §3）；已提案于 FEASIBILITY_REPORT §3.1，本项目不实施；upstream 落地后可把「并列摆位」升级为「泡泡合流」 |
+
+### 11.3 选 B 的理由
+
+1. **合法性**：`@hermes/plugin-sdk` 对宠物零导出（sdk/index.ts 全文 grep 无 pet）；泡泡短语硬编码（pet-bubble.tsx:33-67）、姿态纯派生（pet.ts:107 derivePetState）、pet RPC 全部核心内部（tui_gateway/server.py:180）——插件侧唯一受支持扩展面就是皮肤包文件（[PET] §2/§3），完全不触碰 C1。
+2. **形态跃迁**：宠物可弹出为 core 自有 OS 级透明置顶窗（pet-overlay popOutPet/restorePetOverlay，pet-overlay.ts:197-242，Alt+滚轮缩放 / 未读徽标 / 反应动画）——插件自建窗被 deny-all（§8.2/[AUDIT] §9.2），穿皮肤包即**零进程管理成本**获得原 Phase 2（DR-4 C 路线 pywebview 独立窗）想要的桌面常驻角色形态；pywebview 路线降为后备。
+3. **语义对齐免费**：core 已把会话状态派生为宠物姿态——busy→run、awaiting（attention）→waiting（pet.ts:107，[PET] §2），与本项目的忙碌/等待提醒语义天然一致，**核心自有行为，无需注入**。
+4. **职责单一**：管家面板去角色化后聚焦本项目真正的核心（记账账本 + 规则提醒 + 音效，README 核心理念「鲸鱼只是表现层」）；角色动画/交互/缩放/图库全部由 core 官方维护，砍掉 M10 自建角色素材长尾。
+5. **数据/代码分离一致**：皮肤包定性为**用户数据**（§11.6），与 §6「数据必须与代码分离」原则同构。
+
+### 11.4 与 DR-1~14 的关系（无冲突；一处修订点）
+
+| 关系 | 说明 |
+|---|---|
+| DR-1/DR-2/DR-3（形态/记账/凭据） | 不变——宠物宿主化只影响表现层宿主角色，三半体与数据流原样 |
+| **DR-4（修订点）** | 窗口形态目标重述：OS 级常驻**角色**改由 core 宠物窗口承接（皮肤包着装）；DR-4 Phase 1 floating pane 保留 = 管家面板本体；DR-4 Phase 2 pywebview 独立窗降为后备（仅用户不使用内置宠物时才有意义） |
+| DR-5（泡泡解耦） | 不变——Bubble Definition→Resolver→RenderModel→Renderer 原样，仅 Renderer 宿主从「鲸鱼角色面板」改为「管家面板」（去角色渲染） |
+| DR-6（归一化层） | 不变——9 个归一化事件集不变；表现消费端由「鲸鱼动画」改为「泡泡内容 + 面板强调色」 |
+| DR-7~DR-14 | 不变（生命周期/进程/记账/去重/时区语义均与角色无关） |
+| DR-10（排除改 Core） | 重申一致——候选 C 出局；皮肤包是文件级接口；候选 D（upstream）仅记录提案不实施 |
+
+### 11.5 修订后组件图
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│ ① 官方宠物窗口（Hermes core 自有，非本项目组件）                         │
+│    独立透明置顶 overlay（popOut / Alt+滚轮缩放 / 未读徽标 / 反应动画）     │
+│    角色 ◄── 鲸鱼皮肤包（用户数据，pets/whale/，宠物图库选择激活）           │
+│    姿态 ◄── 会话状态派生（core 自有行为，无需注入）：                      │
+│              busy→run、awaiting→waiting                               │
+│    泡泡文字 = core 硬编码短语（插件不可注入；upstream 提案见              │
+│              FEASIBILITY_REPORT §3.1）                                │
+└──────────────────────────────────────────────────────────────────────┘
+                  ▲ 并列摆位（用户把管家面板拖到宠物旁）
+┌──────────────────────────────────────────────────────────────────────┐
+│ ② whale 管家面板（本插件 floating pane，去角色化——自建 SVG 鲸鱼移除）      │
+│    泡泡   ◄── 余额 / 预算 / 单轮消费 / 等待提醒（DR-5 解耦不变）           │
+│    数据卡 ◄── 余额 / 今日 / 7 日（DR-1/DR-2 数据流不变）                  │
+│    提醒   ◄── Rules（BALANCE_LOW / BUDGET_REACHED / wait，DR-14）      │
+│    音效   ◄── sound engine（默认关）                                    │
+│    情绪状态机 ──► 泡泡内容 / 面板强调色（原鲸鱼动画位）                    │
+└──────────────────────────────────────────────────────────────────────┘
+
+皮肤包数据流（一次性安装，非运行时依赖）：
+assets/whale-pet-pack/（构建产物） ──用户复制──► D:\hermes\pets\whale\ ──自动发现/图库选择──► 宠物着装
+```
+
+### 11.6 皮肤包 = 用户数据（非代码）
+
+- **归属**：安装位置 `<HERMES_HOME>/pets/<slug>/`（与 `<HERMES_HOME>/whale-widget/` 数据目录同类），**不进插件代码目录**——catalog SHA 原子发布/回收（[AUDIT] §7.3）不触碰它，插件升级/回滚不影响已装皮肤。
+- **运行时依赖方向**：插件**不读取**皮肤包（记账/泡泡/提醒/音效全链路无 `pets/` 依赖）；皮肤包缺失 = 纯外观回退（宠物显示其它皮肤或默认，管家面板全功能）。
+- **分发方式**：构建产物 `assets/whale-pet-pack/`（`tools/build-whale-pet-pack.py` 纯 stdlib 生成）随仓库/release zip 提供，由**用户手动复制**到 `D:\hermes\pets\whale\`——HERMES_HOME 一切写入由用户执行（AGENTS.md §0）；步骤见 INSTALL.md §12。
+- **替代来源**：Hermes 内置 `/pet-generate` 可自生成同格式皮肤（示例提示 "cute pixel whale"），产物同格式自动入库（[PET] §2）。
+
+### 11.7 新增待验证项（并入移交清单）
+
+1. 真机宠物装载：复制皮肤包 → 图库选择 whale → 桌面出现鲸鱼（**NOT VERIFIED**，待用户执行，INSTALL.md §12）。
+2. 管家面板去角色化后的视觉验收（desktop/src 改动由并行工程师落地后）。
+3. upstream Hermes Pet API 提案跟进（FEASIBILITY_REPORT §3.1）；采纳前宠物泡泡文字不可注入，维持并列摆位。

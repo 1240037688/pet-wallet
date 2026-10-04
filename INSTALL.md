@@ -25,7 +25,7 @@
 
 Unified Package 三半体：
 
-- **desktop 半体** `desktop/plugin.js`：单文件 ESM（构建产物），由 Hermes Electron（runtime-loader）加载，负责鲸鱼浮窗、状态栏芯片、泡泡、事件转发；
+- **desktop 半体** `desktop/plugin.js`：单文件 ESM（构建产物），由 Hermes Electron（runtime-loader）加载，负责管家面板（floating pane）、状态栏芯片、泡泡、事件转发；角色形象由 Hermes 内置宠物承载（可选，见 §12）；
 - **dashboard 半体** `dashboard/plugin_api.py`（+ `whale_core/`）：FastAPI router，挂载在 `/api/plugins/whale-widget/`，负责账本（SQLite）、计价、余额轮询、提醒规则、REST；
 - **agent 半体** `__init__.py`（+ `whale_agent/approval_hook.py`）：注册 `pre_approval_request` / `post_approval_response` observer hook，把审批挂起状态写入数据目录。
 
@@ -96,7 +96,7 @@ node tools/check-security.mjs                       # 产物级安全自检（�
 | `/health` | App 运行中请求 `GET /api/plugins/whale-widget/health`（serve 端口由 App 动态分配，可从日志获取；或经 `node tools/dev-preview.mjs` 预览面间接核对） | `{"ok":true,"plugin":"whale-widget","schema_version":1,...}`；账本损坏时 `ok:false` + `ledger_error`（fail-closed） |
 | 运行日志 | 查看 `<HERMES_HOME>/whale-widget/logs/whale-widget.log` | 首次请求后出现 `whale-widget runtime started: data_dir=... schema_version=...` |
 | 状态栏芯片 | 看 Hermes 底部状态栏右侧 | 出现 whale-widget 芯片：`●` ok（后端与账本可用）/ `◐` 账本降级 / `○` 后端不可达 / `◌` 探测中 |
-| 鲸鱼浮窗 | Plugins 页启用桌面半体后 | floating pane 出现鲸鱼，可拖拽、点击、按压 |
+| 管家面板 | Plugins 页启用桌面半体后 | floating pane 出现管家面板（泡泡/数据卡），可拖拽、点击、按压；角色形象由内置宠物承载（§12，可选） |
 | 数据目录 | 查看 `<HERMES_HOME>/whale-widget/` | 自动生成 `whale.db` / `config.json` / `logs\` |
 
 未配置凭据时余额显示 **`—`（不是 0）**——这是预期语义（「未配置 ≠ 余额为零」，AGENTS.md §8 红线），配好凭据后自动进入余额轮询。
@@ -195,7 +195,7 @@ env 名 **`DEEPSEEK_API_KEY`**。优点：密钥不落插件可见的明文文�
 
 - **估算 vs 真实严格分列**：单轮/今日消费为估算值（三级计价：hermes_estimate > 价目表 > token_only），
   UI 一律带「估算」角标；真实观测（余额差分）单列展示。未计价轮显示 `—`，绝不按 0 计。
-- **素材为占位**：鲸鱼形象是占位 SVG（M10 正式素材未完成）；音效**不发货默认素材**——
+- **素材**：管家面板已去角色化（DR-15），角色形象由 Hermes 内置宠物承载（§12）；音效**不发货默认素材**——
   `sound.enabled` 开启后，在素材就位前也天然无声。
 - **未完成里程碑**：M11 多 Provider（现仅 DeepSeek 余额）、M12 设置 UI（现走 config.json）、
   M13 打包发布（catalog `repo`/`sha` 为占位）——未完成项总账见
@@ -210,3 +210,70 @@ env 名 **`DEEPSEEK_API_KEY`**。优点：密钥不落插件可见的明文文�
 该 sidecar 面向**未来**的 catalog PR 分发路径（GitHub repo + SHA pin + 评审准入），其中 `repo`/`sha`
 当前为占位，M13 打包定稿。**手动部署（§4–§5）完全不依赖此文件**——复制目录 + `plugins.enabled`
 白名单即可。
+
+## 12. 宠物皮肤（可选，推荐）
+
+> 背景（DR-15，2026-10-04）：宿主角色 = **Hermes 内置宠物**穿鲸鱼皮肤包；whale 管家面板已去角色化
+> （无自建形象，只承载泡泡/数据/提醒/音效）。系统调研与 file:line 证据见
+> [`docs/research/HERMES_PET_SYSTEM.md`](docs/research/HERMES_PET_SYSTEM.md)；
+> 架构定性见 `docs/design/ARCHITECTURE_DECISION.md` §11。
+
+### 12.1 什么是 Hermes 内置宠物系统
+
+Hermes 桌面自带桌宠子系统（v0.21.5+）：皮肤包放在 `<HERMES_HOME>/pets/<slug>/`（**自动发现，
+无需注册**），每个皮肤包 = `pet.json`（id/displayName/description/spritesheetPath）+ Codex 规格
+spritesheet（**8 列 × 9 行 = 1536×1872 px**，帧 192×208，每态 6 帧；行序
+idle / running-right / running-left / waving / jumping / failed / waiting / running / review）。
+宠物姿态由会话状态自动派生（busy→run、awaiting→waiting），可弹出为**独立透明置顶窗口**
+（Alt+滚轮缩放），在宠物图库（petdex）中切换皮肤。
+
+宠物**不是**本插件的组件：插件不注入、不控制它（`@hermes/plugin-sdk` 对宠物零导出，泡泡文字为
+core 硬编码）。本插件与它的关系 = 「皮肤包 + 并列摆位」（DR-15）。
+
+### 12.2 安装鲸鱼皮肤包（步骤 2–4 由用户执行）
+
+1. **构建**（项目内执行；纯 stdlib，无第三方依赖）：
+
+   ```text
+   .venv/Scripts/python.exe tools/build-whale-pet-pack.py
+   ```
+
+   产物为 `assets/whale-pet-pack/`（pet.json + spritesheet.png，9 姿态 × 6 帧像素鲸鱼）。
+
+2. **复制**（用户手动执行——AGENTS.md §0 禁止 agent 代写 `D:\hermes`）：
+   把 `assets\whale-pet-pack\` 目录复制到 `D:\hermes\pets\` 下并重命名为 `whale`
+   （或把目录内容复制进已新建的 `D:\hermes\pets\whale\`），结果结构：
+
+   ```text
+   D:\hermes\pets\whale\
+   ├── pet.json
+   └── spritesheet.png
+   ```
+
+3. **选择**：Hermes 设置的宠物图库（petdex）中选择 **whale**（鲸鱼）。
+   注意：未显式选择时宠物取字母序第一个皮肤包，建议在图库中明确点选。
+
+4. **确认**：桌面角落出现像素鲸鱼；可弹出为独立透明置顶窗口，Alt+滚轮缩放调整大小。
+
+5. **摆位**：把 whale 管家面板（floating pane，可拖拽）拖到宠物旁——
+   即得「宠物（角色）+ 随身账本（泡泡/数据/提醒/音效）」组合。
+
+### 12.3 替代方式：/pet-generate 自生成
+
+Hermes 内置 AI 皮肤生成：会话内执行 `/pet-generate`，示例提示词 **"cute pixel whale"**，
+产物同格式自动入库、图库同样可见可选。与 §12.2 的皮肤包**二选一**即可；
+生成器产物为确定性输出（纯 stdlib），便于复检与再分发。
+
+### 12.4 回退
+
+删除 `D:\hermes\pets\whale\` 目录即恢复默认宠物（皮肤包自动发现机制，无需反注册）；
+whale 管家面板与记账功能**完全不受影响**——插件运行时不读取皮肤包，皮肤包缺失只是外观回退。
+
+### 12.5 与管家面板的配合
+
+- **姿态语义天然对齐**：会话 busy→宠物 run、awaiting→waiting 是官方自有行为，与本项目的忙碌/等待
+  提醒语义一致，无需注入（DR-15）。
+- **泡泡分工**：记账/余额/预算/等待提醒泡泡在**管家面板**内呈现；宠物泡泡文字为 core 硬编码短语
+  （不可注入）。若希望插件文案直接出现在宠物泡泡上，需等 upstream 采纳 Hermes Pet API
+  （见 [`docs/design/FEASIBILITY_REPORT.md`](docs/design/FEASIBILITY_REPORT.md) §3.1），
+  当前以「管家面板 + 宠物」并列摆位呈现——把面板拖到宠物旁即可。

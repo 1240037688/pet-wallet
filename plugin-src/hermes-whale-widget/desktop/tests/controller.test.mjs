@@ -11,7 +11,7 @@ import { register } from 'node:module'
 
 register('./loader.mjs', import.meta.url)
 
-const { createWhaleController, $whale, $bubble } = await import('../src/ui/controller.js')
+const { createWhaleController, $whale, $bubble, moodAccent } = await import('../src/ui/controller.js')
 
 test('first click opens the greeting sequence; 2nd/3rd taps advance it', () => {
   const c = createWhaleController()
@@ -215,4 +215,19 @@ test('TASK_COMPLETED plays task_finished through the sound sink', () => {
   c.attachSound({ play: (event) => played.push(event) })
   c.event('TASK_COMPLETED')
   assert.deepEqual(played, ['task_finished'])
+})
+
+// ── Pet-hosting de-roling (DR-15): mood → accent colour mapping ─────────────
+
+test('moodAccent maps every mood to its panel accent colour (idle灰/press蓝/happy绿/money青/waiting黄)', () => {
+  assert.equal(moodAccent('idle'), '#6b7280') // 灰
+  assert.equal(moodAccent('press'), '#3f97de') // 蓝
+  assert.equal(moodAccent('happy'), '#2e7d32') // 绿
+  assert.equal(moodAccent('money'), '#0891b2') // 青
+  assert.equal(moodAccent('waiting'), '#e8a13a') // 黄
+})
+
+test('moodAccent falls back to idle grey for unknown/missing moods', () => {
+  assert.equal(moodAccent('bogus'), moodAccent('idle'))
+  assert.equal(moodAccent(undefined), moodAccent('idle'))
 })

@@ -22,6 +22,22 @@ import {
 // avoid double display (Goal-pass P0-2).
 const NOTIFICATION_KINDS = { budget: 'budget', balance_low: 'balance_low', turn_cost: 'turn_cost' }
 
+// Pet-hosting de-roling (DR-15, docs/research/HERMES_PET_SYSTEM.md): the mood
+// machine no longer drives a rendered face/actor — its snapshots surface as
+// bubbles + the pane's accent dot colour. Pure mapping (idle grey / press blue
+// / happy green / money cyan / waiting amber); unknown moods fall back to idle.
+const MOOD_ACCENT = {
+  idle: '#6b7280',
+  press: '#3f97de',
+  happy: '#2e7d32',
+  money: '#0891b2',
+  waiting: '#e8a13a',
+}
+
+export function moodAccent(mood) {
+  return MOOD_ACCENT[mood] ?? MOOD_ACCENT.idle
+}
+
 export const $whale = atom({ mood: 'idle', clickCount: 0, waiting: null })
 export const $bubble = atom(null)
 

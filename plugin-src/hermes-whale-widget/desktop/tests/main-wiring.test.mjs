@@ -80,7 +80,7 @@ test('floating pane contribution: area panes + native floating data + WhalePane 
   assert.ok(pane, 'pane contribution registered (chip stays separate)')
   assert.equal(pane.area, 'panes')
   assert.deepEqual(pane.data, PANE_DATA)
-  assert.equal(pane.title, 'Whale Widget')
+  assert.equal(pane.title, 'Whale Wallet 管家') // de-roled ledger panel title (DR-15)
   assert.ok(registered.some((c) => c.id === 'chip' && c.area === 'statusBar.right'), 'statusbar chip kept')
 
   // render() yields a WhalePane component element; invoking it with the shim

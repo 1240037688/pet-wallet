@@ -30,6 +30,12 @@
 - 状态：`FIXED`（INSTALL.md 11 节交付；真机步骤 NOT VERIFIED——需用户执行复制/重启）
 - 验收：手动部署步骤（复制→plugins.enabled→重启→opt-in）凭据三种方式（secret_scope env / credentials.json）、卸载与回滚、数据目录说明；与 README 一致。
 
+### P1-3 宠物宿主化（DR-15）
+- 状态：`FIXED`（本轮交付：鲸鱼皮肤包生成器 `tools/build-whale-pet-pack.py` + `assets/whale-pet-pack/` + 管家面板去角色化 + 文档六件套〔ARCHITECTURE_DECISION §11 修订节 / FEASIBILITY_REPORT §3.1 upstream 提案 / INSTALL.md §12 / README 同步 / 本条 / WORKLOG〕；**真机宠物装载 NOT VERIFIED**——复制皮肤包到 `D:\hermes\pets\whale\` 并在图库选择需用户执行，步骤见 INSTALL.md §12）
+- 模块：`tools/build-whale-pet-pack.py` + `assets/whale-pet-pack/`（WP-assets 并行工程师）、`desktop/src/*`（管家面板去角色化，WP-desktop 并行工程师）、docs/*（WP-docs）
+- 验收：构建产物符合 Codex 规格（1536×1872，8 列×9 行，帧 192×208，每态 6 帧，行序 idle/running-right/running-left/waving/jumping/failed/waiting/running/review）；用户复制后宠物图库可见并选中 whale、桌面出现鲸鱼；管家面板无自建角色且泡泡/数据/提醒/音效全功能；姿态语义 busy→run / awaiting→waiting 为官方行为无需注入。
+- 测试方式：生成器自检（尺寸/行序/帧数断言）+ 真机人工验证（INSTALL.md §12 步骤，USER_FLOW_CHECKLIST 模式逐条标注 NOT VERIFIED）。
+
 ## P2 — 集成与稳定性
 
 ### P2-1 combo≥4 idle-line 同 rank 被遮挡

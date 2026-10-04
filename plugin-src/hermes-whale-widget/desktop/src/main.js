@@ -1,6 +1,13 @@
 /**
  * Whale Widget — desktop half entry (M1 pipeline + M5/M6/M7/M8-A wiring).
  *
+ * Pet hosting (架构修订 DR-15): the whale CHARACTER is Hermes' built-in pet
+ * wearing our whale skin pack (docs/research/HERMES_PET_SYSTEM.md — the only
+ * legal integration surface is the skin-pack file; the plugin SDK exports no
+ * pet API). The floating pane below is de-roled into the 鲸鱼管家 ledger panel
+ * (whale-actor.js retired): bubbles + data card + mood accent, dragged next to
+ * the pet. Nothing in this file renders a character.
+ *
  * register(ctx) wires:
  *   - the M1 usage-capture pipeline: normalizer → turn tracker ((session,
  *     turn) bucketing, turn-end settle) → POST /ingest/turn (bounded retry,
@@ -78,7 +85,8 @@ const DEFAULT_UI_CONFIG = {
   sound: { enabled: false, muted: false, volume_global: 100 },
 }
 
-// M6 mood surface: the ONLY normalized events that drive the whale face.
+// M6 mood surface: the ONLY normalized events that drive the mood machine
+// (bubbles + the pane's accent dot — no rendered face, DR-15 de-roling).
 // USER_INPUT_REQUIRED/APPROVAL_REQUIRED arrive via the /wait-state poll
 // (syncWaiting), not from gateway events; STREAM_TICK/TOOL_ACTIVITY are
 // mood-neutral by design (animation discipline, [AUDIT] §12).
@@ -283,7 +291,8 @@ export default {
           }
           continue
         }
-        // M6: mood-relevant events drive the whale face synchronously
+        // M6: mood-relevant events drive the mood machine synchronously
+        // (de-roled: mood surfaces as bubbles + the pane's accent dot)
         if (MOOD_EVENTS.has(event.kind)) {
           try {
             controller.event(event.kind)
@@ -359,10 +368,12 @@ export default {
     // ── contributions ──────────────────────────────────────────────────────
     // M5 floating pane (SDK probe: PANES_AREA + placement floating → native
     // draggable card, viewport-clamped; no plugin-side dragging needed).
+    // De-roled title: the pane is the 鲸鱼管家 ledger panel; the whale
+    // CHARACTER itself is the Hermes built-in pet (DR-15).
     ctx.register({
       id: PANE_ID,
       area: PANES_AREA,
-      title: 'Whale Widget',
+      title: 'Whale Wallet 管家',
       order: 0,
       data: { placement: 'floating', anchor: 'bottom-right', width: '280px' },
       render: () => jsx(WhalePane, { $balance, $summary, $dashboard, $whale, $bubble, controller }),
@@ -375,9 +386,9 @@ export default {
       render: () => renderWhaleChip($health, $ingest),
     })
 
-    // self-check toast (M1 pipeline + M5/M6/M7/M8-A surface)
+    // self-check toast (M1 pipeline + M5/M6/M7/M8-A surface; DR-15 de-roling)
     try {
-      host.notify?.({ message: 'Whale widget loaded (usage capture → ledger ingest + whale pane)' })
+      host.notify?.({ message: 'Whale Wallet 管家已加载（角色 = Hermes 内置宠物；usage capture → ledger ingest + 随身账本面板）' })
     } catch {
       /* toast is best-effort */
     }

@@ -1,0 +1,7 @@
+{
+  "id": "whale",
+  "displayName": "Butler Whale 鲸鱼管家",
+  "description": "hermes-whale-widget host pet — the accounting butler. Pair it with the Whale Wallet butler pane (drag the pane next to your pet).",
+  "spritesheetPath": "spritesheet.png",
+  "createdBy": "hermes-whale-widget"
+}

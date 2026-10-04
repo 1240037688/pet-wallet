@@ -94,6 +94,28 @@
 | ④ before-quit 插件 disposer | App 退出序列先跑各插件 `ctx.onDispose` 再 teardown | 附属进程/临时文件目前只能靠超时自退兜底（最长 60s 残留窗口）；已有 disposer 基建（unload/disable 已跑），只缺退出路径 |
 | ⑤ 官方只读 usage 聚合面（可选） | 把 `/api/analytics/usage` 暴露为 SDK 方法或允许声明式只读 rest 能力 | state.db schema 是内部实现（`schema_version` 已到 31），第三方插件 ro 读是 schema 耦合；官方聚合面能让账本类插件摆脱版本演进风险 |
 
+### 3.1 Hermes Pet API 提案（2026-10-04 追加；DR-15 配套，仅作 upstream 建议记录）
+
+> 事实基础：`docs/research/HERMES_PET_SYSTEM.md`（下称 [PET]，本机 v0.21.5 源码只读核查，file:line 全附）。
+
+**提案 API**（插件渲染进程 SDK 面）：
+
+| 方法 | 语义 | 当前对应物（core 内部，插件不可达） |
+|---|---|---|
+| `host.pet.say(lines: string[], {ttl?: number})` | 在官方宠物泡泡显示插件文案（记账提醒：余额/预算/单轮/等待），ttl 控制自动收起 | 泡泡短语硬编码 SPECS（pet-bubble.tsx:33-67），纯派生自 `$petState/$petActivity`，无注入点（[PET] §3） |
+| `host.pet.react(kind: string)` | 触发宠物反应动画（记账事件彩蛋：任务完成/预算达成） | 唯一 kind `'vibe'` 硬编码（vibe-hearts.tsx:74，`forwardPetReaction`，[PET] §2） |
+| `host.pet.setActivity(patch)` | 附加/微调活动语义（如「余额刷新中」「记账已暂停」） | `$petState/$petActivity` 由会话状态纯派生（pet.ts:107 derivePetState），姿态对插件只读 |
+| `host.pet.getBounds(): {x, y, width, height}` | 只读获取宠物窗口位置/尺寸 | pet-overlay 几何为 core 内部 atom；拿到后管家面板可做吸附摆位 |
+
+**动机（为什么值得提）**：
+
+- **扩展面缺失是结构性的**：`@hermes/plugin-sdk` 对宠物零导出（sdk/index.ts 全文 grep 无 pet）；pet RPC（pet.cells/gallery/generate/hatch/info/select/thumb）全部核心内部（tui_gateway/server.py:180）；渲染进程插件是 blob ESM + import 白名单，core 内部 atom/store 不可触达（[PET] §3）。
+- **宠物是 core 一等公民，生态需求真实**：core 为宠物自备透明置顶窗、缩放、未读徽标、反应动画全套（[PET] §2）——正是本文 §2-①/§3-② 指出插件层拿不到的东西；桌宠/挂件生态（DSH whale、hermes-pet、avatar_pet、本项目）的共同诉求就是「角色承载插件信息」。
+- **与表内既有建议同型**：pet 子系统的 RPC/atom 基建已在，补一个受控读/写面是「把 core 内部已有信息加一条受控出口」（同表① approval 事件的对称性论证），不是新开能力面。
+- **记账语义天然契合**：busy→run、awaiting→waiting 已是 core 自有派生行为（[PET] §2）；缺的只是「插件把记账提醒写进宠物泡泡」这一条通道。
+
+**Without it（当前版本的实际做法，DR-15 候选 B）**：管家面板（floating pane）与宠物**并列摆位**——用户把面板拖到宠物旁，记账提醒泡泡在面板内呈现；宠物姿态随会话状态自然对齐（无需注入），但宠物泡泡文字仍是 core 硬编码短语。功能等价（提醒全部可见），体验分割（两窗两个泡泡源）；upstream 采纳后可升级为泡泡合流。
+
 ---
 
 ## 4. 替代方案（对每个缺失能力的降级路径）

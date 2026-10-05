@@ -439,3 +439,13 @@ M5 基础鲸鱼（floating pane SDK 探查 + 透明/置顶边界确认）→ M6 
 - **主会话（DSH 大泡泡）**：宠物泡泡升级 DSH 规格——maxWidth 260→420px、字号 12→14、内边距 12×16、圆角 16、**指向宠物的菱形尾巴**（reposition 时按上/下位置翻转朝向）+ 默认内容字号整体上调；renderer（可选面板）同步。
 - **WP-matrix（子代理）**：`docs/design/DSH_REPLICATION_MATRIX.md`——112 项逐条对齐：✅ 59 / 🔶 14 / 🔜 30 / ❌ 9（❌ 三大类：核心所有权〔宠物姿态/吸附/翻转/图库〕、平台缺失〔移动端〕、DSH 特有〔素材不可再分发 + 宿主 DOM hack 无对应面〕，全部附 file:line 或约束条款证据 + 替代方案）。
 - 门禁：node 237 / pytest 195 / build + 双重安全自检全绿。
+
+## 2026-10-05 — 部署阻塞修复：plugin.yaml YAML 解析错误（用户批准后执行）
+
+- 症状：插件加入 plugins.enabled 后 serve 报 `Could not read plugin manifest ...: mapping values are not allowed here (line 3, column 116)`。
+- 根因：plugin.yaml 第 3 行 description 为未加引号的 YAML 纯量，内含 `package: agent` 的「冒号+空格」→ 解析器视为映射分隔符。桌面半体不读此文件，故此前宠物交互正常；加入 enabled 白名单后 serve 首次解析即命中。
+- 已排除：provides_hooks 字段写法正确（plugins_manifest.py:33 白名单/:350/:550 实证）；catalog yaml 无同类病灶。
+- 修复：description 加双引号；新增 `dashboard/tests/test_plugin_manifest.py` 三条回归门（manifest 字段对齐 Hermes schema、原始文本级「未加引号冒号」tripwire、catalog 必填字段/SHA 引号）；PyYAML 入项目 venv 并加安全白名单。
+- 已同步：修复后的 plugin.yaml 已复制到 D:\hermes\plugins\hermes-whale-widget\plugin.yaml（MD5 双侧一致，用户授权路径）。
+- 门禁：node 237 / pytest 198（+3 回归门）/ 双重安全自检全绿。
+- 待用户：重启 Hermes 验证（芯片 ●、/whale 面板与宠物泡泡出真实金额）。

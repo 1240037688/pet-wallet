@@ -449,3 +449,11 @@ M5 基础鲸鱼（floating pane SDK 探查 + 透明/置顶边界确认）→ M6 
 - 已同步：修复后的 plugin.yaml 已复制到 D:\hermes\plugins\hermes-whale-widget\plugin.yaml（MD5 双侧一致，用户授权路径）。
 - 门禁：node 237 / pytest 198（+3 回归门）/ 双重安全自检全绿。
 - 待用户：重启 Hermes 验证（芯片 ●、/whale 面板与宠物泡泡出真实金额）。
+
+## 2026-10-05 — agent 半体"装不上"根因：plugins.enabled 白名单缺失（已修复）
+
+- 排查：修复 YAML 后的 pm sync 回执已 `ok`；plugin-check 将 hermes-whale-widget 归类 `manual`（与正常的 hermes-vault 同类）→ manifest 层已通。
+- 官方规则（AGENTS.md + hermes_cli/plugins.py:1550+ 实证）：手动本地插件安装 = 文件夹就位 + **plugins.enabled 加 manifest 名或目录名** + 重启；enabled 名匹配 `{目录名, manifest.name}`（对照 hermes-lcm→hermes-lcm-x）。
+- 根因：config.yaml 的 enabled 列表既无 `whale-widget` 也无 `hermes-whale-widget` → serve 从不导入 agent 半体/挂载 dashboard REST。
+- 修复（用户批准）：备份 config.yaml 后在 enabled 追加 `- whale-widget`（仅此一行）。
+- 待用户：重启 Hermes 验证（芯片 ●、/whale 面板真实金额、宠物泡泡余额、审批 hook 激活）。

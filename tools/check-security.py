@@ -62,6 +62,8 @@ PY_ALLOWED_IMPORTS = {
     "pydantic": "fastapi dependency (payload models from M1)",
     "httpx": "M4 provider client (injectable transport, TEST_PLAN §2.1)",
     "pytest": "test framework only (dashboard/tests)",
+    "yaml": "PyYAML (project venv): manifest/catalog parse gate — regression for the "
+            "2026-10-05 deploy blocker (unquoted colon in plugin.yaml description)",
     "hermes_constants": "Hermes host runtime (guarded import; profile home resolution)",
     "agent": "Hermes serve-process secret read (agent.secret_scope.get_secret; verified"
              " against local hermes-agent agent/secret_scope.py:219; guarded import,"

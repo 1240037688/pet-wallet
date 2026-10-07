@@ -481,3 +481,9 @@ M5 基础鲸鱼（floating pane SDK 探查 + 透明/置顶边界确认）→ M6 
 - code profile 改动全部撤销：删除 profiles/code/{plugins,desktop-plugins}/whale-widget；code config 从备份还原。
 - 保留：默认 profile config.yaml 的 enabled 里 whale-widget 一行（10-05 已批准的启用项；与 {目录名, manifest.name} 双向匹配）。
 - 运行中观测（记录待查）：回滚前 desktop-plugins/whale-widget 曾于 20:03 被运行中的 Hermes 重新物化，其 marker.source 指向 profiles/code/plugins/whale-widget/desktop——Electron 的半体配对引用了 code profile 的 agent 半体。此现象与「桌面当前活动 profile = code」假设一致；如需进一步定位，需取桌面端失败请求的确切 URL（devtools network）或最新 pm 回执。
+
+## 2026-10-07 — 澄清回滚范围：保留规范化命名，仅撤销 code profile 迁移
+
+- 用户澄清：上一条"转回原来的 default"指撤销 code profile 迁移，不是恢复旧目录名。已把误回滚的目录名重新规范化：plugins/whale-widget + desktop-plugins/whale-widget（marker package=whale-widget、source 指向新路径、sourceMtimeMs=1791136560209.62 原值）。
+- 最终状态：目录/清单/桌面 id/API 名全部 = whale-widget；code profile 已干净回滚；默认 profile config enabled=whale-widget。
+- 待查（需用户提供其一）：① 重启后 /whale 页失败请求的完整 URL（devtools Network）；② 最新 pm 回执。

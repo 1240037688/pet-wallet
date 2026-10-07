@@ -465,3 +465,12 @@ M5 基础鲸鱼（floating pane SDK 探查 + 透明/置顶边界确认）→ M6 
 - 阶段 3 验证：迁移后哈希与基线逐文件一致；两个旧目录名在扫描根内均为 0；config enabled=whale-widget（已在 10-05 加入，无需再改）；数据目录 D:\hermes\whale-widget 为空（后端此前从未成功运行，无账本数据）。
 - 项目文档核查：INSTALL/README 本就指向 plugins\whale-widget\，无需修正。
 - 待用户（阶段 4）：启动 Hermes → 插件页应只有一行 Whale Widget（Agent/Desktop 正确关联）→ 芯片 ●、/whale 面板与宠物泡泡出真实金额 → 再重启一次确认不复发。
+
+## 2026-10-07 — 404 "Plugin not found" 根因：桌面后端运行在 code profile（多 profile 隔离）
+
+- 现象：/whale 面板页面正常加载（routes 页 = 桌面半体 OK），但全部 REST 404 {"detail":"Plugin not found"}。
+- 取证链：404 出自 web_server.py:687 守卫中间件（blocked = disabled 或 source==user 且不在 enabled_set）；启用集含 whale-widget 却仍拦截 → 实测后端进程命令行 = `--profile code serve`（PID 99860，端口 9459，经官方 updater closure-repair 启动器）→ **profile 多路复用：code profile 有独立 HERMES_HOME**（profiles/code/：独立 plugins/、config.yaml、desktop-plugins 根）→ 插件只装在默认 profile，对 code 后端不存在。
+- 旁证：外部修复方案 Phase 4.7 已预见 profile 维度；code profile 配置里有用户宠物 deepseek-goldwhale-v1。
+- 修复（用户批准）：agent 半体复制到 profiles/code/plugins/whale-widget；桌面半体复制到 profiles/code/desktop-plugins/whale-widget（marker.source 指向 profile 内 agent 半体）；profiles/code/config.yaml enabled 追加 whale-widget（已备份 config.yaml.bak-whale-20261007）；__pycache__ 清理。
+- 默认 profile 安装保留（切回默认 profile 亦可用）；code profile 将按 DR-9 建立独立账本（profiles/code/whale-widget/whale.db）。
+- 待用户：重启 Hermes 验证面板/泡泡真实金额。

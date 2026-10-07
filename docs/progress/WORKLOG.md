@@ -487,3 +487,10 @@ M5 基础鲸鱼（floating pane SDK 探查 + 透明/置顶边界确认）→ M6 
 - 用户澄清：上一条"转回原来的 default"指撤销 code profile 迁移，不是恢复旧目录名。已把误回滚的目录名重新规范化：plugins/whale-widget + desktop-plugins/whale-widget（marker package=whale-widget、source 指向新路径、sourceMtimeMs=1791136560209.62 原值）。
 - 最终状态：目录/清单/桌面 id/API 名全部 = whale-widget；code profile 已干净回滚；默认 profile config enabled=whale-widget。
 - 待查（需用户提供其一）：① 重启后 /whale 页失败请求的完整 URL（devtools Network）；② 最新 pm 回执。
+
+## 2026-10-07 — 404 真因：孤儿 serve 进程持有过期插件注册表（已终止）
+
+- 决定性证据链：桌面 /whale 页 REST 的 404 {"detail":"Plugin not found"} 指纹唯一匹配 web_server.py:687 守卫；全系统唯一的该类 web 服务 = PID 99860（`--profile code serve --port 0`，监听 9459，headless）；其启动时间 15:07 早于一切文件级修复（目录改名 19:45、code profile 复制 19:55、enabled 行），且为孤儿（父进程已死）——桌面重启不会终止它。
+- 机制：`_get_dashboard_plugins()` 缓存只在"已缓存目录消失"时重扫，新增插件不触发；配置视图为进程内状态 → 15:07 之后的所有磁盘修复对该进程不可见 → 桌面每次重连都是同一个过期后端 → 404 永远复现。这也解释了为什么"重启桌面"从未生效、且此前两轮文件级修复（YAML、enabled、目录规范化、code profile）全部"无效"。
+- 修复：taskkill 终止 99860（孤儿，无存活属主）。桌面下次启动将按当前磁盘状态重新派生后端（plugins/whale-widget 就位 + enabled 已配置）。
+- 注意：该 serve 是 `--profile code` 形态——若桌面新拉起的后端仍是 code profile 而 code profile 又无插件，会再次 404；届时以新后端进程命令行（--profile X）为确证，再决定是切换桌面 profile 还是装入对应 profile。

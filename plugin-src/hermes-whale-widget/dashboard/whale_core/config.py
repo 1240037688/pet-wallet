@@ -13,7 +13,8 @@ Persistence layout (ARCHITECTURE_DECISION §6, per-profile scope):
     1. explicit ``home=`` argument (tests)
     2. ``hermes_constants.get_hermes_home()`` — honours the per-request profile
        scope the web server binds around plugin routes (production path)
-    3. ``HERMES_HOME`` environment variable (tests / manual runs)
+    3. ``HERMES_HOME`` environment variable (tests / manual runs; in our venv
+       hermes_constants is absent, so tests reach this branch)
     4. ``~/.hermes`` (last resort)
 
 config.json holds NO credentials (AGENTS.md §7). Unknown keys on write are
@@ -90,15 +91,21 @@ def hermes_home(home: str | Path | None = None) -> Path:
     """Resolve the Hermes home directory (see module docstring for the order)."""
     if home is not None:
         return Path(home)
-    env = os.environ.get("HERMES_HOME")
-    if env:
-        return Path(env)
-    try:  # production: honours the per-request profile scope (ContextVar)
+    try:  # production: honours the per-request profile scope (ContextVar).
+        # ORDER MATTERS (external audit 2026-10-07): the profile-aware home must
+        # win over the raw env var, or a shared multi-profile backend silently
+        # pins every request's ledger to whatever HERMES_HOME the process
+        # inherited — the exact data-attribution bug the whale-wallet-404
+        # diagnosis flags (config.py env-first vs its own documented order).
         from hermes_constants import get_hermes_home  # type: ignore
 
         return Path(get_hermes_home())
     except Exception:  # noqa: BLE001 - not running inside hermes serve
-        return Path.home() / ".hermes"
+        pass
+    env = os.environ.get("HERMES_HOME")
+    if env:
+        return Path(env)
+    return Path.home() / ".hermes"
 
 
 def data_dir(home: str | Path | None = None) -> Path:

@@ -494,3 +494,11 @@ M5 基础鲸鱼（floating pane SDK 探查 + 透明/置顶边界确认）→ M6 
 - 机制：`_get_dashboard_plugins()` 缓存只在"已缓存目录消失"时重扫，新增插件不触发；配置视图为进程内状态 → 15:07 之后的所有磁盘修复对该进程不可见 → 桌面每次重连都是同一个过期后端 → 404 永远复现。这也解释了为什么"重启桌面"从未生效、且此前两轮文件级修复（YAML、enabled、目录规范化、code profile）全部"无效"。
 - 修复：taskkill 终止 99860（孤儿，无存活属主）。桌面下次启动将按当前磁盘状态重新派生后端（plugins/whale-widget 就位 + enabled 已配置）。
 - 注意：该 serve 是 `--profile code` 形态——若桌面新拉起的后端仍是 code profile 而 code profile 又无插件，会再次 404；届时以新后端进程命令行（--profile X）为确证，再决定是切换桌面 profile 还是装入对应 profile。
+
+## 2026-10-07 — 按外部诊断执行方案 A：桌面启动 profile 切回 default + 数据归属顺序修复
+
+- 采纳外部诊断（whale-wallet-404-diagnosis-and-plan.md）的核心事实：挂载发生在后端**启动时**、按启动 profile 的 enabled 名单（web_server_dashboard.py:861-944，openapi.json 实证 whale 路由缺失）；运行时 gate 不按请求 profile 切换（web_server.py:650-688）→ 桌面后端以 code 启动时，无论装在哪、无论 ?profile=default 都 404。
+- 方案 A 执行：① `active-profile.json` 备份后写 `{"profile": null}`（官方语义 = 无 --profile → 后端落默认 HOME；不可删文件——重播种机制会按"运行中网关/启发式"重新生成）；② 已确认无粘性 active_profile 文件干扰。
+- 插件侧数据归属修复（诊断 §数据隔离）：whale_core/config.py 的解析顺序实现与自身文档相反（env 先于 profile-aware）→ 已改为 profile-aware 优先、env 仅作 venv 内回退（测试 198 全绿）；已同步至部署副本。遗留（Plan B 范围）：api.py 的 _rt 单例按首个请求冻结 data_dir/conn——单 profile 后端下无影响，跨 profile 并发前必须重构（REMAINING_WORK）。
+- 待执行（用户）：完全退出 Hermes → 我退役残留后端进程 → 用户启动 → 桌面以 default 派生后端（挂载 whale API）→ 验证四个接口。
+- 用户可见变化提示：桌面活动 profile 变为 default——code profile 里的会话/宠物（deepseek-goldwhale-v1）不显示，需在 default 重新 adopt 宠物或告知我复制配置。

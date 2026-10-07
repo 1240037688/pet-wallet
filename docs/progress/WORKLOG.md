@@ -457,3 +457,11 @@ M5 基础鲸鱼（floating pane SDK 探查 + 透明/置顶边界确认）→ M6 
 - 根因：config.yaml 的 enabled 列表既无 `whale-widget` 也无 `hermes-whale-widget` → serve 从不导入 agent 半体/挂载 dashboard REST。
 - 修复（用户批准）：备份 config.yaml 后在 enabled 追加 `- whale-widget`（仅此一行）。
 - 待用户：重启 Hermes 验证（芯片 ●、/whale 面板真实金额、宠物泡泡余额、审批 hook 激活）。
+
+## 2026-10-07 — 安装规范化迁移（外部修复方案执行；DR-17）
+
+- 症状（外部诊断文件 whale-widget-repair-plan.md）：插件页出现重复/半部关联错误的 Whale Widget 条目——安装目录名（hermes-whale-widget）与 manifest name（whale-widget）不一致，框架按两个身份处理。
+- 修复（按方案阶段 1-3 执行，用户全程批准）：备份（experiments/hermes-backup-20261007/，116 文件哈希基线 + 两半体 + marker + config 快照，位于扫描根之外）→ 用户关闭 Hermes → `plugins/hermes-whale-widget`→`plugins/whale-widget`、`desktop-plugins/hermes-whale-widget`→`desktop-plugins/whale-widget` → marker 重写（package=whale-widget、source=新 desktop 路径、sourceMtimeMs 取源文件真实 mtime，与原值精确一致）。
+- 阶段 3 验证：迁移后哈希与基线逐文件一致；两个旧目录名在扫描根内均为 0；config enabled=whale-widget（已在 10-05 加入，无需再改）；数据目录 D:\hermes\whale-widget 为空（后端此前从未成功运行，无账本数据）。
+- 项目文档核查：INSTALL/README 本就指向 plugins\whale-widget\，无需修正。
+- 待用户（阶段 4）：启动 Hermes → 插件页应只有一行 Whale Widget（Agent/Desktop 正确关联）→ 芯片 ●、/whale 面板与宠物泡泡出真实金额 → 再重启一次确认不复发。

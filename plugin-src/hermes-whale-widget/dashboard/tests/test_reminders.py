@@ -42,7 +42,7 @@ DAY2_KEY = ingest.local_day_key(DAY2)
 @pytest.fixture()
 def conn(hermes_home):
     """Direct ledger connection (rule-level tests bypass the REST layer)."""
-    c = db.connect(hermes_home / "whale-widget" / "whale.db")
+    c = db.connect(hermes_home / "pet-wallet" / "pet-wallet.db")
     migrations.migrate(c)
     yield c
     c.close()

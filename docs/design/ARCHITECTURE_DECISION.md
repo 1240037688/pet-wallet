@@ -381,3 +381,15 @@ assets/whale-pet-pack/（构建产物） ──用户复制──► D:\hermes\p
 **DR-15 面板降级**：管家 floating pane 改为可选（`config.pane.enabled`，默认 false）——宠物本体是主交互面，面板退为需要常驻数据卡时的 opt-in。皮肤包（DR-15）保持不变：换任何皮肤（含 petdex 商店/AI 生成）交互层均生效。
 
 **已知边界**：弹出式宠物 overlay 是独立 OS 窗口，插件 JS 不在其中加载 → 弹出态的点击交互不可用（upstream `host.pet.*` 提案的正当时机）。
+
+## 2026-10-07 — 当前 profile 的 Wallet 查询作用域
+
+Dashboard 通过 SDK host.state.profile/connectionId 观察当前作用域，以 plugins.manage list 判定 Agent 后端安装与启用情况。所有 Wallet 查询缓存均包含连接和 profile；未安装或未启用时显示单一明确状态而不继续加载四组账本卡片。全局气泡与数据 atom 在作用域改变时清空，异步响应发布前校验作用域。
+共享 HTTP 后端必须自行按请求 profile 授权和分派，插件不能用切换启动 profile 或复制到 code 代替此契约。需要 Hermes 核心的通用插件 API 补丁，非启动 profile 通过既有每 profile PluginHost 隔离模块缓存、数据库和后台工作。补丁已在临时 home 验证，实际核心部署待逐次授权。
+
+
+## 2026-10-07 续修：已安装 profile 独立运行
+
+用户已明确授权默认及 code 等 profile 的复制安装验证。默认/其他 profile 各自正常运行，账本、配置、模块缓存和桌面查询分隔。新增 scoped-ingest-client.js，以连接和 profile 隔离队列、重试及迟到的结算回调；轮次跟踪器按 profile 保存，旧等待/通知响应不得污染新页面。共享后端通过通用请求 profile gate 与每 profile PluginHost 服务，转发保留原客户端身份。核心需 5 个文件（web_server.py、web_server_dashboard.py、web_server_plugin_requests.py、plugin_host.py、plugin_host_child.py），后两个文件保留写接口的 loopback 限制。
+
+JS 244 项、Python 198 项通过；真实 Whale 插件在临时 default/code 复制安装验证，从 default 和 code 两种启动 profile 下，五个端点均 200；16 次并发配置读取隔离，轮次账本隔离与重复提交幂等，远程写 403、未认证 401、未安装/未知 profile 404。实际桌面安装需要运行备份部署脚本并重启验收；测试通过不代表实际部署成功。

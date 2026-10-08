@@ -1,10 +1,35 @@
+# Dependencies
 node_modules/
-references/
-experiments/
-dist/
-*.log
-.env
-__pycache__/
 .venv/
-tools/.preview-build/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Runtime & SQLite databases
+*.db
+*.db-*
+*.db.bak-*
+*.db.corrupt-*
+
+# Logs & Credentials
+*.log
+logs/
+.env
+.env.*
+!.env.example
+credentials.json
+
+# Local experiments & submodules/clones
+experiments/
+references/
+
+# Build caches & test temporary folders
 .pytest-tmp*/
+.pytest_cache/
+tools/.preview-build/
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

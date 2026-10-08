@@ -62,10 +62,10 @@ test('de-roled structure: header row + bubble layer + data card — no whale act
   const header = root.props.children[0]
   const headerRendered = header.type(header.props)
   assert.equal(headerRendered.props.className, 'whale-pane-header')
-  assert.ok(String(headerRendered.props.title).includes('Hermes 内置宠物'), 'hint names the Hermes pet as the character host')
+  assert.ok(String(headerRendered.props.title).includes('Hermes 内置 Pet'), 'hint names the Hermes pet as the character host')
   assert.ok(String(headerRendered.props.title).includes('随身账本'), 'hint names the pane the pet pocket ledger')
   const [title, dot] = headerRendered.props.children
-  assert.equal(title.props.children, '🐋 鲸鱼管家')
+  assert.equal(title.props.children, '🐾 Pet 管家')
   assert.equal(dot.props['data-mood'], $whale.get().mood)
   assert.equal(dot.props.style.background, moodAccent($whale.get().mood))
 

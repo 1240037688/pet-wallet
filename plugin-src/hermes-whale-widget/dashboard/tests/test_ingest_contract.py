@@ -116,7 +116,7 @@ def test_ingest_rejects_non_loopback(client_strict_loopback):
 
 def test_ingest_fail_closed_when_ledger_corrupt(client, hermes_home):
     """DATA_MODEL §7.4: corrupt ledger → 503, never a half write."""
-    db_path = hermes_home / "whale-widget" / "whale.db"
+    db_path = hermes_home / "pet-wallet" / "pet-wallet.db"
     client.post(f"{MOUNT_PREFIX}/ingest/turn", json=TURN)  # initialise runtime
     whale_api.reset_runtime()
     db_path.write_bytes(b"this is definitely not a sqlite database" * 32)

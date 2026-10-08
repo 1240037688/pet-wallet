@@ -28,7 +28,7 @@ function makeCtx({ restImpl } = {}) {
       restCalls.push({ path: p, opts })
       if (restImpl) return restImpl(p, opts)
       if (p === '/health') {
-        return { ok: true, plugin: 'whale-widget', version: '0.1.0', schema_version: 1 }
+        return { ok: true, plugin: 'pet-wallet', version: '0.1.0', schema_version: 1 }
       }
       if (p === '/ingest/turn') return { status: 'accepted', accepted: 1, duplicate: 0 }
       throw new Error(`unexpected rest path: ${p}`)
@@ -75,7 +75,7 @@ test('built artifact registers under the shimmed runtime', async (t) => {
   register('./loader.mjs', import.meta.url)
 
   const mod = await import('../plugin.js')
-  assert.equal(mod.default.id, 'whale-widget')
+  assert.equal(mod.default.id, 'pet-wallet')
   assert.equal(typeof mod.default.register, 'function')
   assert.ok(mod.$health, 'artifact exports $health atom')
   assert.ok(mod.$ingest, 'artifact exports $ingest atom')
@@ -111,7 +111,7 @@ test('built artifact registers under the shimmed runtime', async (t) => {
   // chip renders the widget + connectivity text (navigation wrapper → span)
   const vnode = chip.render()
   assert.equal(typeof vnode.type, 'function') // SDK renders the component
-  assert.match(chipInnerText(vnode), /Whale widget/)
+  assert.match(chipInnerText(vnode), /Pet Wallet/)
   assert.match(chipInnerText(vnode), /ok · v0\.1\.0 \(schema 1\)/)
 })
 
@@ -124,7 +124,7 @@ test('M1 pipeline: gateway events → settled turn → POST /ingest/turn', async
         postBodies.push(JSON.parse(opts.body))
         return { status: 'accepted', accepted: 1, duplicate: 0 }
       }
-      if (p === '/health') return { ok: true, plugin: 'whale-widget', version: '0.1.0', schema_version: 1 }
+      if (p === '/health') return { ok: true, plugin: 'pet-wallet', version: '0.1.0', schema_version: 1 }
       throw new Error(`unexpected rest path: ${p}`)
     },
   })
@@ -167,7 +167,7 @@ test('M1 reconnect handling: after_reconnect tag on the first post-reconnect set
         postBodies.push(JSON.parse(opts.body))
         return { status: 'accepted', accepted: 1, duplicate: 0 }
       }
-      if (p === '/health') return { ok: true, plugin: 'whale-widget', version: '0.1.0', schema_version: 1 }
+      if (p === '/health') return { ok: true, plugin: 'pet-wallet', version: '0.1.0', schema_version: 1 }
       throw new Error(`unexpected rest path: ${p}`)
     },
   })
@@ -193,7 +193,7 @@ test('M1 degraded surface: dashboard down → dead letter + 记账暂不可用 o
   const mod = await import('../plugin.js')
   const { ctx, registered, handlers, disposed } = makeCtx({
     restImpl: (p) => {
-      if (p === '/health') return { ok: true, plugin: 'whale-widget', version: '0.1.0', schema_version: 1 }
+      if (p === '/health') return { ok: true, plugin: 'pet-wallet', version: '0.1.0', schema_version: 1 }
       throw new Error('ECONNREFUSED')
     },
   })

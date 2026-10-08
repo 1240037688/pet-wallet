@@ -227,6 +227,21 @@ test('moodAccent maps every mood to its panel accent colour (idle灰/press蓝/ha
   assert.equal(moodAccent('waiting'), '#e8a13a') // 黄
 })
 
+test('combo ≥4 surfaces combo-line, combo ≥8 drops easter-egg', () => {
+  const c = createWhaleController()
+  for (let i = 0; i < 4; i++) c.click()
+  assert.equal($bubble.get().key, 'idle-line')
+  for (let i = 4; i < 8; i++) c.click()
+  assert.equal($bubble.get().key, 'easter-egg')
+})
+
+test('triggerIdleBubble surfaces idle-line or quota-report', () => {
+  const c = createWhaleController()
+  c.triggerIdleBubble()
+  assert.equal($bubble.get().key, 'idle-line')
+  assert.ok($bubble.get().def)
+})
+
 test('moodAccent falls back to idle grey for unknown/missing moods', () => {
   assert.equal(moodAccent('bogus'), moodAccent('idle'))
   assert.equal(moodAccent(undefined), moodAccent('idle'))

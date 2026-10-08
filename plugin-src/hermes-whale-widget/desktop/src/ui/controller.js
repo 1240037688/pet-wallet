@@ -11,7 +11,11 @@ import { createResolver } from './bubble/resolver.js'
 import { formatMoney } from '../core/money.js'
 import {
   DEFAULT_GREETING,
+  DEFAULT_QUOTA_REPORT,
+  DEFAULT_WALLET_OVERVIEW,
   DEFAULT_IDLE_LINES,
+  DEFAULT_COMBO_LINES,
+  DEFAULT_EASTER_EGG,
   DEFAULT_TURN_COST,
   DEFAULT_BUDGET_REACHED,
   DEFAULT_BALANCE_LOW,
@@ -80,6 +84,13 @@ export function createWhaleController({
   let soundSink = null
   let lastWaiting = null // 'question' | 'approval' | null (transition detection for sounds)
   const standingNotifKeys = new Set() // balance_low/budget keys currently queued
+  let currentData = {
+    balance_text: null,
+    today_text: null,
+    estimated_today_text: null,
+    turn_cost_text: null,
+    session_name: null,
+  }
   const publish = () => {
     $whale.set(machine.snapshot())
     $bubble.set(queue.view())
@@ -112,16 +123,25 @@ export function createWhaleController({
       publish()
     },
 
-    /** Click: first tap opens the greeting sequence, taps advance it; a
-     *  ≥4 combo (DSH §B easter-egg zone) drops a random idle line — the
-     *  greeting is dismissed first so the same-rank idle line is visible. */
+    /** Click: multi-phase progression across combos:
+     *  1: greeting sequence (tapAdvance)
+     *  2: active quota report (Codex 5h/Weekly or balance)
+     *  3: today's wallet overview (spend & turns)
+     *  4-7: teasing/combo lines
+     *  8+: easter-egg buff sequence
+     */
     click() {
       const { clickCount } = machine.click()
+      const d = currentData
       if (clickCount === 1) {
-        queue.show({ key: 'greeting', kind: 'info', def: DEFAULT_GREETING, data: {}, ttlMs: 12_000 })
+        queue.show({ key: 'greeting', kind: 'info', def: DEFAULT_GREETING, data: d, ttlMs: 12_000 })
+      } else if (clickCount >= 8) {
+        queue.dismiss('greeting')
+        queue.dismiss('idle-line')
+        queue.show({ key: 'easter-egg', kind: 'info', def: DEFAULT_EASTER_EGG, data: d, ttlMs: 7_000 })
       } else if (clickCount >= 4) {
         queue.dismiss('greeting')
-        queue.show({ key: 'idle-line', kind: 'info', def: DEFAULT_IDLE_LINES, data: {}, ttlMs: 6_000 })
+        queue.show({ key: 'idle-line', kind: 'info', def: DEFAULT_COMBO_LINES, data: d, ttlMs: 6_000 })
       } else {
         queue.advance()
       }
@@ -129,11 +149,34 @@ export function createWhaleController({
       return clickCount
     },
 
+    /** Manually advance or dismiss the visible bubble. */
+    advance() {
+      const res = queue.advance()
+      publish()
+      return res
+    },
+
+    dismiss(key) {
+      const res = queue.dismiss(key)
+      publish()
+      return res
+    },
+
+    /** Idle timer bubble trigger. */
+    triggerIdleBubble() {
+      const d = currentData
+      const def = d.balance_text && Math.random() < 0.5 ? DEFAULT_QUOTA_REPORT : DEFAULT_IDLE_LINES
+      queue.show({ key: 'idle-line', kind: 'info', def, data: d, ttlMs: 7_000 })
+      publish()
+    },
+
     /** Normalized whale event → mood + bubble side effects. */
     event(kind, payload = {}) {
       machine.event(kind)
       if (kind === 'TASK_COMPLETED') {
-        queue.show({ key: 'task-done', kind: 'info', def: DEFAULT_IDLE_LINES, data: {}, ttlMs: 4_000 })
+        const d = currentData
+        const def = d.balance_text ? DEFAULT_QUOTA_REPORT : DEFAULT_IDLE_LINES
+        queue.show({ key: 'task-done', kind: 'info', def, data: d, ttlMs: 6_000 })
         try {
           soundSink?.play?.('task_finished')
         } catch { /* audio is cosmetic */ }
@@ -213,7 +256,14 @@ export function createWhaleController({
 
     /** Balance/summary snapshot → resolver data (— semantics in resolver). */
     setData({ balanceText, todayText, estimatedTodayText, turnCostText, sessionName } = {}) {
-      this._data = { balance_text: balanceText ?? null, today_text: todayText ?? null, estimated_today_text: estimatedTodayText ?? null, turn_cost_text: turnCostText ?? null, session_name: sessionName ?? null }
+      currentData = {
+        balance_text: balanceText ?? null,
+        today_text: todayText ?? null,
+        estimated_today_text: estimatedTodayText ?? null,
+        turn_cost_text: turnCostText ?? null,
+        session_name: sessionName ?? null,
+      }
+      this._data = currentData
     },
 
     /** Periodic settle (main.js interval). */

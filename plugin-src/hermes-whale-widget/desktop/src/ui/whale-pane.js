@@ -35,8 +35,8 @@ import { BubbleLayer } from './bubble/renderer.js'
 export const PANE_ID = 'whale-widget-pane'
 
 const PANE_HINT =
-  '角色由 Hermes 内置宠物承载（见 docs/research/HERMES_PET_SYSTEM.md）；' +
-  '本面板是其随身账本，建议拖到宠物旁。点击面板与它互动（泡泡 + 音效）。'
+  '角色由 Hermes 内置 Pet 承载（见 docs/research/HERMES_PET_SYSTEM.md）；' +
+  '本面板是其随身账本，建议拖到 Pet 旁。点击面板与它互动（泡泡 + 音效）。'
 
 function toneColor(tone) {
   switch (tone) {
@@ -63,7 +63,7 @@ function HeaderRow({ mood }) {
       color: '#25384c',
     },
     children: [
-      jsx('span', { key: 't', children: '🐋 鲸鱼管家' }),
+      jsx('span', { key: 't', children: '🐾 Pet 管家' }),
       jsx('span', {
         key: 'dot',
         'data-mood': mood,

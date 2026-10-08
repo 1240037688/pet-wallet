@@ -502,3 +502,17 @@ M5 基础鲸鱼（floating pane SDK 探查 + 透明/置顶边界确认）→ M6 
 - 插件侧数据归属修复（诊断 §数据隔离）：whale_core/config.py 的解析顺序实现与自身文档相反（env 先于 profile-aware）→ 已改为 profile-aware 优先、env 仅作 venv 内回退（测试 198 全绿）；已同步至部署副本。遗留（Plan B 范围）：api.py 的 _rt 单例按首个请求冻结 data_dir/conn——单 profile 后端下无影响，跨 profile 并发前必须重构（REMAINING_WORK）。
 - 待执行（用户）：完全退出 Hermes → 我退役残留后端进程 → 用户启动 → 桌面以 default 派生后端（挂载 whale API）→ 验证四个接口。
 - 用户可见变化提示：桌面活动 profile 变为 default——code profile 里的会话/宠物（deepseek-goldwhale-v1）不显示，需在 default 重新 adopt 宠物或告知我复制配置。
+
+## 2026-10-07 — Wallet 跟随当前 profile，默认安装范围不变
+
+用户决定：账本跟随桌面当前 profile；Agent 后端只安装在默认 profile；未安装时明确提示。
+源码修复：dashboard.js 使用 SDK profile/connection 原子及 plugins.manage list 检查当前 Agent 状态，后端可用才请求账本，查询缓存包含连接和 profile。data-service.js 与 main.js 丢弃旧作用域的延迟响应，切换时清空余额、汇总和气泡数据并重新检查当前配置。
+新增 profile-isolation.test.mjs；JS 241 项通过（包含 4 项新回归）。核心真实 middleware 的隔离 overlay 验证 default=200、code=404，两个独立测试 profile 的模块缓存及数据 home 各自隔离，未认证=401、未知 profile/禁用=404。
+核心根因仍存在于实际安装：共享 serve 启动 profile 决定挂载，原运行时 gate 忽略请求 profile。核心补丁及运行时部署需要另行逐次授权；本次未修改 D:\hermes 或任何实际 profile 安装/启用配置。不能把源码测试通过当作实际桌面修复完成。
+
+
+## 2026-10-07 续修：已安装 profile 独立运行
+
+用户已明确授权默认及 code 等 profile 的复制安装验证。默认/其他 profile 各自正常运行，账本、配置、模块缓存和桌面查询分隔。新增 scoped-ingest-client.js，以连接和 profile 隔离队列、重试及迟到的结算回调；轮次跟踪器按 profile 保存，旧等待/通知响应不得污染新页面。共享后端通过通用请求 profile gate 与每 profile PluginHost 服务，转发保留原客户端身份。核心需 5 个文件（web_server.py、web_server_dashboard.py、web_server_plugin_requests.py、plugin_host.py、plugin_host_child.py），后两个文件保留写接口的 loopback 限制。
+
+JS 244 项、Python 198 项通过；真实 Whale 插件在临时 default/code 复制安装验证，从 default 和 code 两种启动 profile 下，五个端点均 200；16 次并发配置读取隔离，轮次账本隔离与重复提交幂等，远程写 403、未认证 401、未安装/未知 profile 404。实际桌面安装需要运行备份部署脚本并重启验收；测试通过不代表实际部署成功。

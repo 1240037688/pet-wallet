@@ -274,7 +274,7 @@ def test_adjustment_conflict_via_rest_returns_409(client, fake_key):
 
 
 def test_credentials_file_fallback_source(conn, hermes_home):
-    cred_dir = hermes_home / "whale-widget"
+    cred_dir = hermes_home / "pet-wallet"
     cred_dir.mkdir(parents=True, exist_ok=True)
     (cred_dir / "credentials.json").write_text(
         json.dumps({"providers": {"deepseek": FAKE_KEY}}), encoding="utf-8"

@@ -78,22 +78,22 @@ def test_setup_logging_writes_redacted_file(tmp_path):
     try:
         logger = get_logger("test")
         logger.warning(f"balance fetch failed; key was {FAKE_KEY}")
-        for handler in logging.getLogger("whale-widget").handlers:
+        for handler in logging.getLogger("pet-wallet").handlers:
             handler.flush()
-        log_file = tmp_path / "logs" / "whale-widget.log"
+        log_file = tmp_path / "logs" / "pet-wallet.log"
         assert log_file.exists()
         content = log_file.read_text("utf-8")
         assert FAKE_KEY not in content
         assert "balance fetch failed" in content  # non-sensitive text survives
     finally:
-        for handler in logging.getLogger("whale-widget").handlers[:]:
-            logging.getLogger("whale-widget").removeHandler(handler)
+        for handler in logging.getLogger("pet-wallet").handlers[:]:
+            logging.getLogger("pet-wallet").removeHandler(handler)
 
 
 def test_setup_logging_is_idempotent(tmp_path):
     setup_logging(tmp_path, also_stderr=False)
     setup_logging(tmp_path, also_stderr=False)  # re-invoke must not duplicate handlers
-    root = logging.getLogger("whale-widget")
+    root = logging.getLogger("pet-wallet")
     file_handlers = [h for h in root.handlers if isinstance(h, logging.FileHandler)]
     assert len(file_handlers) == 1
 
@@ -102,7 +102,7 @@ def test_rotation_parameters_match_design(tmp_path):
     from logging.handlers import RotatingFileHandler
 
     setup_logging(tmp_path, also_stderr=False)
-    root = logging.getLogger("whale-widget")
+    root = logging.getLogger("pet-wallet")
     rotating = [h for h in root.handlers if isinstance(h, RotatingFileHandler)]
     assert len(rotating) == 1
     assert rotating[0].maxBytes == MAX_BYTES == 1_000_000  # 5 × 1MB, ARCH §6

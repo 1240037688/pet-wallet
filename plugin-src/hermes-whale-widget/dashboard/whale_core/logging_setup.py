@@ -23,11 +23,11 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 LOG_DIRNAME = "logs"
-LOG_FILENAME = "whale-widget.log"
+LOG_FILENAME = "pet-wallet.log"
 MAX_BYTES = 1_000_000  # 1 MB
 BACKUP_COUNT = 5
 
-_LOGGER_NAME = "whale-widget"
+_LOGGER_NAME = "pet-wallet"
 
 # --- redaction patterns -----------------------------------------------------
 # sk- shapes: sk- followed by >=8 secret-ish chars. `sk-test-...` fixtures are

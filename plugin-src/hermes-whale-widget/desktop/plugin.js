@@ -34,9 +34,9 @@ function WhaleChip({ $health: $health2, $ingest: $ingest2 }) {
   const glyph = GLYPHS[health.state] ?? GLYPHS.checking;
   return jsx("span", {
     className: "whale-widget-chip",
-    title: "Whale widget \u2014 dashboard connectivity",
+    title: "Pet Wallet \u2014 dashboard connectivity",
     style: { display: "inline-flex", alignItems: "center", gap: "6px", cursor: "default" },
-    children: `${glyph} Whale widget \xB7 ${healthLabel(health)}${ingestLabel(ingest)}`
+    children: `${glyph} Pet Wallet \xB7 ${healthLabel(health)}${ingestLabel(ingest)}`
   });
 }
 function renderWhaleChip($health2, $ingest2) {
@@ -429,18 +429,46 @@ var DEFAULT_GREETING = validateBubble({
     {
       kind: "custom",
       modules: [
-        { type: "text", text: "\u55E8\uFF0C\u6211\u662F\u8BB0\u8D26\u5C0F\u9CB8\u9C7C \u{1F40B}", style: { bold: true, size: 16 } },
-        { type: "text", text: "\u70B9\u70B9\u6211\uFF0C\u770B\u770B\u82B1\u4E86\u591A\u5C11\uFF5E", style: { size: 14 } }
+        { type: "random_text", texts: ["\u55E8\uFF0C\u6211\u662F\u4F60\u7684 Pet \u8D26\u672C\u7BA1\u5BB6 \u{1F43E}", "\u4E3B\u4EBA\u597D\u5440\uFF01\u4ECA\u5929\u5199\u4EE3\u7801\u8F9B\u82E6\u5566 \u{1F4BB}", "Pet Wallet \u968F\u65F6\u4E3A\u4F60\u8BB0\u8D26 \u2728"], style: { bold: true, size: 15 } },
+        { type: "text", text: "\u70B9\u70B9\u6211\uFF0C\u770B\u770B\u5F53\u524D\u989D\u5EA6\u4E0E\u82B1\u8D39\uFF5E", style: { size: 13 } }
       ]
     },
     {
       kind: "choice",
       options: [
-        { w: 3, item: { kind: "custom", modules: [{ type: "balance", row: 0, style: { bold: true } }, { type: "text", row: 1, text: "\u8FD9\u662F API \u4F59\u989D\uFF08\u771F\u5B9E\u89C2\u6D4B\uFF09" }] } },
-        { w: 2, item: { kind: "custom", modules: [{ type: "estimated_today", row: 0, style: { bold: true } }, { type: "text", row: 1, text: "\u8FD9\u662F\u4ECA\u65E5\u4F30\u7B97\u6D88\u8D39\uFF08\u4F30\u7B97\u503C\uFF09" }] } }
+        { w: 3, item: { kind: "custom", modules: [{ type: "balance", row: 0, style: { bold: true } }, { type: "text", row: 1, text: "\u5F53\u524D\u8BA2\u9605\u4E0E\u989D\u5EA6\uFF08\u5B9E\u65F6\u89C2\u6D4B\uFF09" }] } },
+        { w: 2, item: { kind: "custom", modules: [{ type: "estimated_today", row: 0, style: { bold: true } }, { type: "text", row: 1, text: "\u4ECA\u65E5\u8BB0\u8D26\u4F30\u7B97\u6D88\u8D39" }] } }
       ]
     },
-    { kind: "custom", modules: [{ type: "text", text: "\u6709\u9884\u7B97\u548C\u4F59\u989D\u63D0\u9192\u7684\u8BDD\uFF0C\u6211\u4F1A\u7B2C\u4E00\u65F6\u95F4\u544A\u8BC9\u4F60\uFF01", style: { size: 14 } }] }
+    { kind: "custom", modules: [{ type: "text", text: "\u53CC\u51FB\u6CE1\u6CE1\u6216\u70B9\u51FB\u4FA7\u8FB9\u680F\u53EF\u76F4\u8FBE\u94B1\u5305\u9762\u677F\u54E6\uFF01", style: { size: 13 } }] }
+  ]
+});
+var DEFAULT_QUOTA_REPORT = validateBubble({
+  v: 1,
+  tapAdvance: false,
+  items: [
+    {
+      kind: "custom",
+      modules: [
+        { type: "text", text: "\u{1F4CA} \u8BA2\u9605\u4E0E\u989D\u5EA6\u64AD\u62A5", style: { bold: true, size: 13, color: "#1d4ed8" } },
+        { type: "balance", row: 1, style: { bold: true, size: 15 } },
+        { type: "text", row: 2, text: "\uFF08\u70B9\u51FB\u6211\u7EE7\u7EED\u67E5\u770B\uFF09", style: { size: 11, color: "#6b7280" } }
+      ]
+    }
+  ]
+});
+var DEFAULT_WALLET_OVERVIEW = validateBubble({
+  v: 1,
+  tapAdvance: false,
+  items: [
+    {
+      kind: "custom",
+      modules: [
+        { type: "text", text: "\u{1F4B0} \u4ECA\u65E5\u6D88\u8D39\u6982\u89C8", style: { bold: true, size: 13, color: "#047857" } },
+        { type: "estimated_today", row: 1, style: { bold: true, size: 15 } },
+        { type: "text", row: 2, text: "\u8BB0\u8D26\u672C\u5DF2\u4E3A\u4F60\u7A33\u59A5\u8BB0\u5F55", style: { size: 11, color: "#6b7280" } }
+      ]
+    }
   ]
 });
 var DEFAULT_TURN_COST = validateBubble({
@@ -466,8 +494,50 @@ var DEFAULT_IDLE_LINES = validateBubble({
       modules: [
         {
           type: "random_text",
-          texts: ["\u4ECA\u5929\u4E5F\u4E00\u8D77\u52A0\u6CB9\u5440\uFF5E", "\u8BB0\u5F97\u770B\u770B\u4ECA\u65E5\u82B1\u4E86\u591A\u5C11\u54E6", "\u4F59\u989D\u4E0D\u8DB3\u65F6\u6211\u4F1A\u63D0\u9192\u4F60\u7684\uFF01", "\u5495\u565C\u5495\u565C\u2026", "\u70B9\u6211\u53EF\u4EE5\u770B\u4F59\u989D\u548C\u4ECA\u65E5\u6D88\u8D39"]
+          texts: [
+            "\u4ECA\u5929\u4E5F\u4E00\u8D77\u52A0\u6CB9\u5440\uFF5E \u{1F680}",
+            "\u8BB0\u5F97\u52B3\u9038\u7ED3\u5408\uFF0C\u559D\u53E3\u6C34\u4F11\u606F\u4E0B \u{1F375}",
+            "\u989D\u5EA6\u5145\u8DB3\uFF0C\u5C3D\u60C5\u63A2\u7D22\u5427\uFF01",
+            "Pet \u7BA1\u5BB6\u6B63\u5728\u4E3A\u4F60\u5B88\u62A4\u94B1\u5305 \u{1F6E1}\uFE0F",
+            "\u70B9\u6211\u53EF\u4EE5\u770B\u5F53\u524D\u989D\u5EA6\u548C\u4ECA\u65E5\u6D88\u8D39 \u{1F43E}",
+            "\u5495\u565C\u5495\u565C\u2026 \u9ED8\u9ED8\u966A\u7740\u4F60\u5199\u4EE3\u7801 \u2728"
+          ]
         }
+      ]
+    }
+  ]
+});
+var DEFAULT_COMBO_LINES = validateBubble({
+  v: 1,
+  tapAdvance: false,
+  items: [
+    {
+      kind: "custom",
+      modules: [
+        {
+          type: "random_text",
+          texts: [
+            "\u6233\u6211\u597D\u591A\u6B21\u5566\uFF01\u6709\u5728\u8BA4\u771F\u5199\u4EE3\u7801\u5417\uFF5E \u{1F43E}",
+            "\u54CE\u5440\uFF0C\u522B\u6320\u5566\uFF0C\u6BDB\u90FD\u8981\u6389\u5149\u4E86\uFF01\u{1F606}",
+            "\u94B1\u5305\u7BA1\u5BB6\u6B63\u5728\u76EF\u7740\u4F60\u7684\u4F59\u989D\u5462\uFF0C\u522B\u6478\u9C7C\uFF5E \u{1F440}",
+            "\u8FDE\u51FB\u8FDE\u51FB\uFF01\u672C Pet \u8981\u88AB\u4F60\u70B9\u6655\u5566 \u{1F300}",
+            "\u518D\u70B9\u6211\uFF0C\u6211\u5C31\u628A\u4F60\u7684\u6D88\u8D39\u8D26\u5355\u5FF5\u51FA\u6765\u54E6\uFF01\u{1F4DC}"
+          ],
+          style: { bold: true }
+        }
+      ]
+    }
+  ]
+});
+var DEFAULT_EASTER_EGG = validateBubble({
+  v: 1,
+  tapAdvance: false,
+  items: [
+    {
+      kind: "custom",
+      modules: [
+        { type: "text", text: "\u26A1 \u8FBE\u6210\u795E\u7EA7\u8FDE\u51FB\uFF01", style: { bold: true, size: 15, color: "#d97706" } },
+        { type: "text", text: "Pet \u4E3A\u4F60\u91CA\u653E\u4E86\u300C\u4EE3\u7801\u65E0 Bug\u300D\u4E13\u5C5E Buff \u{1F31F}", style: { size: 13 } }
       ]
     }
   ]
@@ -553,6 +623,13 @@ function createWhaleController({
   let soundSink = null;
   let lastWaiting = null;
   const standingNotifKeys = /* @__PURE__ */ new Set();
+  let currentData = {
+    balance_text: null,
+    today_text: null,
+    estimated_today_text: null,
+    turn_cost_text: null,
+    session_name: null
+  };
   const publish = () => {
     $whale.set(machine.snapshot());
     $bubble.set(queue.view());
@@ -581,27 +658,56 @@ function createWhaleController({
       }
       publish();
     },
-    /** Click: first tap opens the greeting sequence, taps advance it; a
-     *  ≥4 combo (DSH §B easter-egg zone) drops a random idle line — the
-     *  greeting is dismissed first so the same-rank idle line is visible. */
+    /** Click: multi-phase progression across combos:
+     *  1: greeting sequence (tapAdvance)
+     *  2: active quota report (Codex 5h/Weekly or balance)
+     *  3: today's wallet overview (spend & turns)
+     *  4-7: teasing/combo lines
+     *  8+: easter-egg buff sequence
+     */
     click() {
       const { clickCount } = machine.click();
+      const d = currentData;
       if (clickCount === 1) {
-        queue.show({ key: "greeting", kind: "info", def: DEFAULT_GREETING, data: {}, ttlMs: 12e3 });
+        queue.show({ key: "greeting", kind: "info", def: DEFAULT_GREETING, data: d, ttlMs: 12e3 });
+      } else if (clickCount >= 8) {
+        queue.dismiss("greeting");
+        queue.dismiss("idle-line");
+        queue.show({ key: "easter-egg", kind: "info", def: DEFAULT_EASTER_EGG, data: d, ttlMs: 7e3 });
       } else if (clickCount >= 4) {
         queue.dismiss("greeting");
-        queue.show({ key: "idle-line", kind: "info", def: DEFAULT_IDLE_LINES, data: {}, ttlMs: 6e3 });
+        queue.show({ key: "idle-line", kind: "info", def: DEFAULT_COMBO_LINES, data: d, ttlMs: 6e3 });
       } else {
         queue.advance();
       }
       publish();
       return clickCount;
     },
+    /** Manually advance or dismiss the visible bubble. */
+    advance() {
+      const res = queue.advance();
+      publish();
+      return res;
+    },
+    dismiss(key) {
+      const res = queue.dismiss(key);
+      publish();
+      return res;
+    },
+    /** Idle timer bubble trigger. */
+    triggerIdleBubble() {
+      const d = currentData;
+      const def = d.balance_text && Math.random() < 0.5 ? DEFAULT_QUOTA_REPORT : DEFAULT_IDLE_LINES;
+      queue.show({ key: "idle-line", kind: "info", def, data: d, ttlMs: 7e3 });
+      publish();
+    },
     /** Normalized whale event → mood + bubble side effects. */
     event(kind, payload = {}) {
       machine.event(kind);
       if (kind === "TASK_COMPLETED") {
-        queue.show({ key: "task-done", kind: "info", def: DEFAULT_IDLE_LINES, data: {}, ttlMs: 4e3 });
+        const d = currentData;
+        const def = d.balance_text ? DEFAULT_QUOTA_REPORT : DEFAULT_IDLE_LINES;
+        queue.show({ key: "task-done", kind: "info", def, data: d, ttlMs: 6e3 });
         try {
           soundSink?.play?.("task_finished");
         } catch {
@@ -677,7 +783,14 @@ function createWhaleController({
     },
     /** Balance/summary snapshot → resolver data (— semantics in resolver). */
     setData({ balanceText, todayText, estimatedTodayText, turnCostText, sessionName } = {}) {
-      this._data = { balance_text: balanceText ?? null, today_text: todayText ?? null, estimated_today_text: estimatedTodayText ?? null, turn_cost_text: turnCostText ?? null, session_name: sessionName ?? null };
+      currentData = {
+        balance_text: balanceText ?? null,
+        today_text: todayText ?? null,
+        estimated_today_text: estimatedTodayText ?? null,
+        turn_cost_text: turnCostText ?? null,
+        session_name: sessionName ?? null
+      };
+      this._data = currentData;
     },
     /** Periodic settle (main.js interval). */
     tick() {
@@ -817,7 +930,7 @@ function BubbleLayer({ model }) {
 
 // plugin-src/hermes-whale-widget/desktop/src/ui/whale-pane.js
 var PANE_ID = "whale-widget-pane";
-var PANE_HINT = "\u89D2\u8272\u7531 Hermes \u5185\u7F6E\u5BA0\u7269\u627F\u8F7D\uFF08\u89C1 docs/research/HERMES_PET_SYSTEM.md\uFF09\uFF1B\u672C\u9762\u677F\u662F\u5176\u968F\u8EAB\u8D26\u672C\uFF0C\u5EFA\u8BAE\u62D6\u5230\u5BA0\u7269\u65C1\u3002\u70B9\u51FB\u9762\u677F\u4E0E\u5B83\u4E92\u52A8\uFF08\u6CE1\u6CE1 + \u97F3\u6548\uFF09\u3002";
+var PANE_HINT = "\u89D2\u8272\u7531 Hermes \u5185\u7F6E Pet \u627F\u8F7D\uFF08\u89C1 docs/research/HERMES_PET_SYSTEM.md\uFF09\uFF1B\u672C\u9762\u677F\u662F\u5176\u968F\u8EAB\u8D26\u672C\uFF0C\u5EFA\u8BAE\u62D6\u5230 Pet \u65C1\u3002\u70B9\u51FB\u9762\u677F\u4E0E\u5B83\u4E92\u52A8\uFF08\u6CE1\u6CE1 + \u97F3\u6548\uFF09\u3002";
 function toneColor(tone) {
   switch (tone) {
     case "ok":
@@ -846,7 +959,7 @@ function HeaderRow({ mood }) {
       color: "#25384c"
     },
     children: [
-      jsx3("span", { key: "t", children: "\u{1F40B} \u9CB8\u9C7C\u7BA1\u5BB6" }),
+      jsx3("span", { key: "t", children: "\u{1F43E} Pet \u7BA1\u5BB6" }),
       jsx3("span", {
         key: "dot",
         "data-mood": mood,
@@ -949,7 +1062,7 @@ var $balance = atom2(null);
 var $summary = atom2(null);
 var $dashboard = atom2({ state: "checking", detail: null });
 var clamp = (n, lo, hi) => Math.min(Math.max(n, lo), hi);
-function createDataService({ rest, now = () => Date.now() } = {}) {
+function createDataService({ rest, now = () => Date.now(), getScope = () => "" } = {}) {
   let balanceTimer = null;
   let summaryTimer = null;
   let lastSummaryRefresh = 0;
@@ -957,22 +1070,28 @@ function createDataService({ rest, now = () => Date.now() } = {}) {
   const SUMMARY_COALESCE_MS = 2e3;
   async function refreshBalance() {
     if (disposed) return;
+    const scope = getScope();
     try {
       const data = await rest("/balance");
+      if (disposed || scope !== getScope()) return;
       $balance.set(data ?? null);
       $dashboard.set({ state: "ok", detail: null });
     } catch (err) {
+      if (disposed || scope !== getScope()) return;
       $dashboard.set({ state: "unreachable", detail: String(err?.message || err || "unknown") });
     }
   }
   async function refreshSummary() {
     if (disposed) return;
+    const scope = getScope();
     lastSummaryRefresh = now();
     try {
       const data = await rest("/usage/summary");
+      if (disposed || scope !== getScope()) return;
       $summary.set(data ?? null);
       $dashboard.set({ state: "ok", detail: null });
     } catch (err) {
+      if (disposed || scope !== getScope()) return;
       $dashboard.set({ state: "unreachable", detail: String(err?.message || err || "unknown") });
     }
   }
@@ -1396,6 +1515,54 @@ function createIngestClient({
         paused: state.paused,
         deadLetterItems: state.deadLetters.map((d) => ({ error: d.error, at: d.at, turns: d.turns.length }))
       };
+    }
+  };
+}
+
+// plugin-src/hermes-whale-widget/desktop/src/core/scoped-ingest-client.js
+function createScopedIngestClient({ getScope, rest, ...options }) {
+  const clients = /* @__PURE__ */ new Map();
+  let active = null;
+  let disposed = false;
+  function selectScope() {
+    const scope = getScope();
+    if (active === scope) return clients.get(scope);
+    if (active !== null) clients.get(active)?.pause();
+    active = scope;
+    let client = clients.get(scope);
+    if (!client) {
+      const whenActive = (callback) => (...args) => {
+        if (!disposed && scope === getScope()) callback?.(...args);
+      };
+      client = createIngestClient({
+        ...options,
+        rest: (path, body) => {
+          if (disposed || scope !== getScope()) throw new Error("Accounting owner is not active");
+          return rest(path, body);
+        },
+        onUnavailable: whenActive(options.onUnavailable),
+        onRecovered: whenActive(options.onRecovered),
+        onStats: whenActive(options.onStats),
+        onSettled: whenActive(options.onSettled)
+      });
+      clients.set(scope, client);
+    } else {
+      client.resume();
+    }
+    return client;
+  }
+  return {
+    selectScope,
+    submitTurn: (payload) => selectScope().submitTurn(payload),
+    flushAndWait: () => selectScope().flushAndWait(),
+    pause: () => selectScope().pause(),
+    resume: () => selectScope().resume(),
+    isPaused: () => selectScope().isPaused(),
+    isUnavailable: () => selectScope().isUnavailable(),
+    stats: () => selectScope().stats(),
+    dispose() {
+      disposed = true;
+      for (const client of clients.values()) client.pause();
     }
   };
 }
@@ -1836,7 +2003,7 @@ function tailCss(above) {
   };
   return above ? { ...common, bottom: `-${Math.round(TAIL_SIZE / 2) - 1}px`, left: "50%", marginLeft: `-${Math.round(TAIL_SIZE / 2)}px` } : { ...common, top: `-${Math.round(TAIL_SIZE / 2) - 1}px`, left: "50%", marginLeft: `-${Math.round(TAIL_SIZE / 2)}px`, transform: "rotate(225deg)" };
 }
-function createPetLayer({ controller, $bubble: $bubble2, doc = null, resolve, now = () => Date.now(), raf = null, interval = null } = {}) {
+function createPetLayer({ controller, $bubble: $bubble2, doc = null, resolve, now = () => Date.now(), raf = null, interval = null, onOpenDashboard = null } = {}) {
   const view = typeof document !== "undefined" && !doc ? document : doc;
   const resolver = resolve ?? null;
   let started = false;
@@ -1906,9 +2073,23 @@ function createPetLayer({ controller, $bubble: $bubble2, doc = null, resolve, no
     const tail = mk("div");
     tail.dataset.role = "tail";
     bubbleEl.appendChild(tail);
+    bubbleEl.title = "\u5355\u51FB\u5207\u6362 \xB7 \u53CC\u51FB\u6253\u5F00 Pet Wallet";
+    bubbleEl.style.cursor = "pointer";
     bubbleEl.addEventListener("click", (e) => {
       e.stopPropagation();
-      controller.click();
+      if (typeof controller?.advance === "function") {
+        const advanced = controller.advance();
+        if (!advanced && typeof controller?.click === "function") controller.click();
+      } else if (typeof controller?.click === "function") {
+        controller.click();
+      }
+    });
+    bubbleEl.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      try {
+        onOpenDashboard?.();
+      } catch {
+      }
     });
     host2.appendChild(bubbleEl);
     startFollow();
@@ -2076,8 +2257,8 @@ import {
   useValue as useValue4
 } from "@hermes/plugin-sdk";
 import { jsx as jsx4 } from "react/jsx-runtime";
-var ROUTE_PATH = "/whale";
-var ROUTE_TITLE = "Whale Wallet";
+var ROUTE_PATH = "/pet-wallet";
+var ROUTE_TITLE = "Pet Wallet";
 var TONE_COLORS = {
   ok: "var(--ui-green)",
   zero: "var(--ui-cyan)",
@@ -2106,8 +2287,18 @@ function visibleBalanceProviders(rows, selectedIds) {
   if (selected.length === 0) return list;
   return list.filter((row) => selected.includes(row.provider_id));
 }
-function providerBalanceText(row) {
+function providerBalanceText2(row) {
   if (!row || typeof row !== "object" || typeof row.provider_id !== "string") return null;
+  if (row.kind === "quota") {
+    const windows = Array.isArray(row.windows) ? row.windows : [];
+    const winTexts = windows.map((w) => {
+      const rem = w.remaining_percent ?? (w.used_percent != null ? Math.max(0, 100 - w.used_percent) : null);
+      const lbl = w.label === "Session" ? "5h" : w.label === "Weekly" ? "\u5468" : w.label;
+      return rem != null ? `${lbl}\u5269${Math.round(rem)}%` : `${lbl}\u2014`;
+    });
+    const name = row.name ?? (row.provider_id === "openai-codex" ? "Codex" : row.provider_id);
+    return winTexts.length > 0 ? `${name} ${winTexts.join(" \xB7 ")}` : `${name} \u989D\u5EA6\u6B63\u5E38`;
+  }
   const units = row.observed_balance_units;
   if (units === null || units === void 0 || !Number.isFinite(Number(units))) {
     return `${row.provider_id} \u2014`;
@@ -2118,7 +2309,7 @@ function providerBalanceText(row) {
   return row.currency ? `${row.provider_id} ${amount} ${row.currency}` : `${row.provider_id} ${amount}`;
 }
 function bubbleBalanceText(rows, selectedIds) {
-  const texts = visibleBalanceProviders(rows, selectedIds).map(providerBalanceText).filter((text) => typeof text === "string");
+  const texts = visibleBalanceProviders(rows, selectedIds).map(providerBalanceText2).filter((text) => typeof text === "string");
   return texts.length > 0 ? texts.join(" | ") : null;
 }
 function toggleBubbleProvider(selectedIds, providerId, on, allConfiguredIds) {
@@ -2153,7 +2344,22 @@ function providerCards(rows, selectedIds) {
         tone: "unknown",
         amountText: "\u2014",
         badge: null,
-        hint: "\u672A\u914D\u7F6E\u51ED\u636E \u2014 \u914D\u7F6E\u540E\u6B64\u5904\u663E\u793A\u4E94\u72B6\u6001\u4F59\u989D"
+        hint: "\u672A\u914D\u7F6E\u51ED\u636E \u2014 \u914D\u7F6E\u540E\u6B64\u5904\u663E\u793A\u4E94\u72B6\u6001\u4F59\u989D\u6216\u914D\u989D"
+      };
+    }
+    if (row.kind === "quota") {
+      return {
+        ...base,
+        kind: "quota",
+        name: row.name ?? row.provider_id,
+        plan: row.plan ?? null,
+        windows: Array.isArray(row.windows) ? row.windows : [],
+        details: Array.isArray(row.details) ? row.details : [],
+        stateLabel: row.state === "ok" ? row.plan ? `${row.plan} \u8BA2\u9605` : "\u6B63\u5E38" : "\u672A\u914D\u7F6E",
+        tone: row.state === "ok" ? "ok" : "unknown",
+        amountText: null,
+        badge: row.plan ? row.plan : null,
+        hint: null
       };
     }
     const amountText = units !== null && units !== void 0 ? formatMoney(units, { currency: row.currency ?? null }) : null;
@@ -2361,14 +2567,59 @@ function BalanceCard({ card, onToggle, onRefresh, refreshing }) {
           jsx4(StateDot, { tone: card.tone }),
           jsx4("span", {
             style: { fontSize: 14, fontWeight: 600, color: "var(--ui-text-primary)" },
-            children: card.provider_id
+            children: card.name ?? card.provider_id
           }),
           jsx4("span", { style: { fontSize: 12, color: "var(--ui-text-tertiary)" }, children: card.stateLabel }),
           jsx4("span", { style: { flex: 1 } }),
           card.badge ? jsx4(Badge, { text: card.badge, color: toneColor2(card.tone) }) : null
         ]
       }),
-      jsx4("div", {
+      card.kind === "quota" ? jsx4("div", {
+        key: "quota-windows",
+        style: { display: "flex", flexDirection: "column", gap: 10, margin: "8px 0" },
+        children: (card.windows ?? []).map((win, idx) => {
+          const rem = win.remaining_percent ?? (win.used_percent != null ? Math.max(0, 100 - win.used_percent) : null);
+          const barColor = rem == null ? "var(--ui-border)" : rem < 15 ? "var(--ui-red)" : rem < 35 ? "var(--ui-orange)" : "var(--ui-green)";
+          return jsx4("div", {
+            key: `win-${idx}`,
+            style: { display: "flex", flexDirection: "column", gap: 4 },
+            children: [
+              jsx4("div", {
+                style: { display: "flex", justifyContent: "space-between", fontSize: 12 },
+                children: [
+                  jsx4("span", { style: { fontWeight: 500, color: "var(--ui-text-primary)" }, children: win.label }),
+                  jsx4("span", {
+                    style: { color: barColor, fontWeight: 600, fontVariantNumeric: "tabular-nums" },
+                    children: rem != null ? `\u5269 ${Math.round(rem)}%` : "\u2014"
+                  })
+                ]
+              }),
+              jsx4("div", {
+                style: {
+                  width: "100%",
+                  height: 6,
+                  borderRadius: 3,
+                  background: "var(--ui-border)",
+                  overflow: "hidden"
+                },
+                children: jsx4("div", {
+                  style: {
+                    width: `${rem ?? 0}%`,
+                    height: "100%",
+                    borderRadius: 3,
+                    background: barColor,
+                    transition: "width 0.3s ease"
+                  }
+                })
+              }),
+              win.reset_at ? jsx4("div", {
+                style: { fontSize: 11, color: "var(--ui-text-tertiary)" },
+                children: `\u91CD\u7F6E\u65F6\u95F4\uFF1A${new Date(win.reset_at).toLocaleString("zh-CN", { hour12: false, month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}`
+              }) : null
+            ]
+          });
+        })
+      }) : jsx4("div", {
         key: "amount",
         style: { display: "flex", alignItems: "baseline", gap: 6 },
         children: jsx4("span", {
@@ -2382,11 +2633,16 @@ function BalanceCard({ card, onToggle, onRefresh, refreshing }) {
           children: card.amountText
         })
       }),
+      card.details?.length ? jsx4("div", {
+        key: "details",
+        style: { fontSize: 11.5, color: "var(--ui-text-secondary)", display: "flex", flexDirection: "column", gap: 2 },
+        children: card.details.map((d, i) => jsx4("span", { key: i, children: `\u{1F4A1} ${d}` }))
+      }) : null,
       card.hint ? jsx4("div", { key: "hint", style: { fontSize: 11.5, color: "var(--ui-text-tertiary)" }, children: card.hint }) : null,
       jsx4(ToggleRow, {
         key: "toggle",
-        label: "\u6CE1\u6CE1\u663E\u793A\u4F59\u989D",
-        description: "\u5173\u95ED\u540E\u5BA0\u7269\u6CE1\u6CE1\u4E0D\u518D\u663E\u793A\u8BE5\u5BB6\u7684\u4F59\u989D\uFF08\u5199\u5165 bubble.balance_providers\uFF09",
+        label: card.kind === "quota" ? "\u6CE1\u6CE1\u663E\u793A\u989D\u5EA6" : "\u6CE1\u6CE1\u663E\u793A\u4F59\u989D",
+        description: "\u5173\u95ED\u540E Pet \u6CE1\u6CE1\u4E0D\u518D\u663E\u793A\u8BE5\u5BB6\u7684\u72B6\u6001\uFF08\u5199\u5165 bubble.balance_providers\uFF09",
         checked: card.shownInBubble,
         onChange: (on) => onToggle(card.provider_id, on)
       }),
@@ -2397,7 +2653,7 @@ function BalanceCard({ card, onToggle, onRefresh, refreshing }) {
           variant: "ghost",
           disabled: refreshing,
           onClick: onRefresh,
-          children: refreshing ? "\u5237\u65B0\u4E2D\u2026" : "\u5237\u65B0\u4F59\u989D"
+          children: refreshing ? "\u5237\u65B0\u4E2D\u2026" : card.kind === "quota" ? "\u5237\u65B0\u989D\u5EA6" : "\u5237\u65B0\u4F59\u989D"
         })
       })
     ]
@@ -2665,15 +2921,50 @@ function PricingTables({ pricing }) {
     ]
   });
 }
+function profileBackendView(result, profile = "default") {
+  const row = (result?.plugins ?? []).find((item) => item.name === "pet-wallet" || item.key === "pet-wallet" || item.name === "whale-widget" || item.key === "whale-widget");
+  if (!row) return {
+    ready: false,
+    title: "\u5F53\u524D profile \u672A\u5B89\u88C5 Pet Wallet \u540E\u7AEF",
+    description: `\u5F53\u524D profile\uFF1A${profile}\u3002\u8BF7\u5207\u6362\u5230\u5DF2\u5B89\u88C5\u7684 profile\uFF0C\u6216\u5728\u63D2\u4EF6\u9875\u9762\u4E3A\u6B64 profile \u5B89\u88C5 Agent \u534A\u90E8\u3002`
+  };
+  if (row.status !== "enabled") return {
+    ready: false,
+    title: "\u5F53\u524D profile \u672A\u542F\u7528 Pet Wallet \u540E\u7AEF",
+    description: `\u5F53\u524D profile\uFF1A${profile}\u3002\u8BF7\u5728\u63D2\u4EF6\u9875\u9762\u68C0\u67E5 Agent \u5F00\u5173\u3002`
+  };
+  return { ready: true };
+}
 function DashboardPage({ deps }) {
-  const health = useValue4(deps.atoms.$health);
+  const profile = useValue4(deps.$profile) || "default";
+  const connection = useValue4(deps.$connection) || "local";
   const version = useValue4(deps.$version);
   const days = useValue4(deps.$chartDays);
   const selected = useValue4(deps.atoms.$bubbleProviders);
   const refreshing = useValue4(deps.$refreshing);
   const queryClient = useQueryClient();
+  const availability = useQuery({
+    queryKey: ["whale-dashboard", connection, profile, "backend", version],
+    queryFn: () => deps.host.request("plugins.manage", { action: "list", profile }),
+    refetchInterval: 6e4,
+    refetchOnMount: "always",
+    staleTime: 0,
+    retry: 1
+  });
+  const backend = availability.data ? profileBackendView(availability.data, profile) : null;
+  const healthQuery = useQuery({
+    queryKey: ["whale-dashboard", connection, profile, "health", version],
+    queryFn: () => deps.rest("/health"),
+    enabled: backend?.ready === true,
+    staleTime: 0,
+    refetchOnMount: "always",
+    retry: 1
+  });
+  const ready = backend?.ready === true && healthQuery.isSuccess;
+  const health = { state: healthQuery.isSuccess ? healthQuery.data?.ok ? "ok" : "degraded" : healthQuery.error ? "unreachable" : "checking", detail: healthQuery.data?.ledger_error };
   const providers = useQuery({
-    queryKey: ["whale-dashboard", "providers", version],
+    enabled: ready,
+    queryKey: ["whale-dashboard", connection, profile, "providers", version],
     queryFn: () => deps.rest("/providers/status"),
     refetchInterval: 6e4,
     refetchOnMount: "always",
@@ -2681,7 +2972,8 @@ function DashboardPage({ deps }) {
     retry: 1
   });
   const summary = useQuery({
-    queryKey: ["whale-dashboard", "summary", version, days],
+    enabled: ready,
+    queryKey: ["whale-dashboard", connection, profile, "summary", version, days],
     queryFn: () => deps.rest(`/usage/summary?days=${days}`),
     refetchInterval: 3e4,
     refetchOnMount: "always",
@@ -2689,7 +2981,8 @@ function DashboardPage({ deps }) {
     retry: 1
   });
   const turns = useQuery({
-    queryKey: ["whale-dashboard", "turns", version],
+    enabled: ready,
+    queryKey: ["whale-dashboard", connection, profile, "turns", version],
     queryFn: () => deps.rest("/usage/turns?limit=20"),
     refetchInterval: 6e4,
     refetchOnMount: "always",
@@ -2697,7 +2990,8 @@ function DashboardPage({ deps }) {
     retry: 1
   });
   const pricing = useQuery({
-    queryKey: ["whale-dashboard", "pricing", version],
+    enabled: ready,
+    queryKey: ["whale-dashboard", connection, profile, "pricing", version],
     queryFn: () => deps.rest("/pricing"),
     refetchInterval: 3e5,
     staleTime: 6e4,
@@ -2725,18 +3019,20 @@ function DashboardPage({ deps }) {
   };
   const allConfiguredIds = (providers.data?.providers ?? []).filter((row) => row?.configured === true).map((row) => row.provider_id);
   const setBubbleShow = (providerId, on) => {
+    if ((deps.$profile.get() || "default") !== profile || (deps.$connection.get() || "local") !== connection) return;
     const previous = normalizeSelectedProviders(deps.atoms.$bubbleProviders.get?.() ?? []);
     const next = toggleBubbleProvider(previous, providerId, on, allConfiguredIds);
     deps.atoms.$bubbleProviders.set(next);
     void Promise.resolve(
       deps.rest("/config", { method: "PUT", body: JSON.stringify({ bubble: { balance_providers: next } }) })
     ).then((merged) => {
+      if ((deps.$profile.get() || "default") !== profile || (deps.$connection.get() || "local") !== connection) return;
       const persisted = merged?.bubble?.balance_providers;
       if (Array.isArray(persisted)) deps.atoms.$bubbleProviders.set(normalizeSelectedProviders(persisted));
     }).catch(() => {
       deps.atoms.$bubbleProviders.set(previous);
       try {
-        deps.host?.notify?.({ message: "Whale Wallet\uFF1A\u6CE1\u6CE1\u663E\u793A\u5217\u8868\u5199\u5165\u5931\u8D25" });
+        deps.host?.notify?.({ message: "Pet Wallet\uFF1A\u6CE1\u6CE1\u663E\u793A\u5217\u8868\u5199\u5165\u5931\u8D25" });
       } catch {
       }
     });
@@ -2757,7 +3053,7 @@ function DashboardPage({ deps }) {
             letterSpacing: "-0.02em",
             color: "var(--ui-text-primary)"
           },
-          children: "\u{1F40B} Whale Wallet \u7528\u91CF"
+          children: `\u{1F43E} Pet Wallet \u7528\u91CF \xB7 ${profile}`
         }),
         jsx4(HealthDot, { health }),
         jsx4("span", { style: { flex: 1 } }),
@@ -2765,6 +3061,19 @@ function DashboardPage({ deps }) {
       ]
     })
   );
+  const unavailable = availability.error ? { title: "\u65E0\u6CD5\u68C0\u67E5\u5F53\u524D profile \u7684\u63D2\u4EF6\u72B6\u6001", description: String(availability.error?.message ?? availability.error) } : backend && !backend.ready ? backend : healthQuery.error ? {
+    title: "\u5F53\u524D profile \u7684\u8BB0\u8D26\u540E\u7AEF\u5C1A\u672A\u5C31\u7EEA",
+    description: `\u5F53\u524D profile\uFF1A${profile}\u3002${healthQuery.error?.message ?? healthQuery.error}`
+  } : null;
+  if (unavailable || !ready) {
+    sections.push(jsx4(unavailable ? ErrorState : EmptyState, {
+      key: "backend-state",
+      title: unavailable?.title ?? "\u6B63\u5728\u8FDE\u63A5\u5F53\u524D profile \u7684\u8BB0\u8D26\u540E\u7AEF",
+      description: unavailable?.description ?? `\u5F53\u524D profile\uFF1A${profile}`,
+      children: jsx4(Button, { variant: "secondary", onClick: refreshAll, children: "\u91CD\u65B0\u68C0\u67E5" })
+    }));
+    return jsx4("div", { style: { display: "flex", flexDirection: "column", gap: 20, padding: 16 }, children: sections });
+  }
   if (providers.error && !providers.data) {
     sections.push(
       jsx4(ErrorState, {
@@ -2791,7 +3100,7 @@ function DashboardPage({ deps }) {
       })
     );
   } else {
-    sections.push(sectionTitle("\u8BA2\u9605\u4F59\u989D", "balances-title"));
+    sections.push(sectionTitle("\u8BA2\u9605\u4E0E\u989D\u5EA6", "balances-title"));
     sections.push(
       jsx4("div", {
         key: "cards",
@@ -2906,7 +3215,7 @@ function DashboardPage({ deps }) {
 function ChipNavigate({ children, onNavigate }) {
   return jsx4("span", {
     className: "whale-widget-chip-nav",
-    title: onNavigate ? "\u6253\u5F00 Whale Wallet \u7528\u91CF\u9762\u677F" : void 0,
+    title: onNavigate ? "\u6253\u5F00 Pet Wallet \u7528\u91CF\u9762\u677F" : void 0,
     onClick: onNavigate ? (event) => {
       event?.preventDefault?.();
       try {
@@ -2922,7 +3231,9 @@ function createDashboard({ rest, host: host2, atoms }) {
   const $version = atom3(0);
   const $chartDays = atom3(7);
   const $refreshing = atom3(false);
-  const deps = { rest, host: host2, atoms: atoms ?? {}, $version, $chartDays, $refreshing };
+  const $profile = host2?.state?.profile ?? atom3("default");
+  const $connection = host2?.state?.connectionId ?? atom3("local");
+  const deps = { rest, host: host2, atoms: atoms ?? {}, $profile, $connection, $version, $chartDays, $refreshing };
   const contribution = {
     id: "dashboard",
     area: ROUTES_AREA,
@@ -2943,7 +3254,7 @@ function createDashboard({ rest, host: host2, atoms }) {
 }
 
 // plugin-src/hermes-whale-widget/desktop/src/main.js
-var ID = "whale-widget";
+var ID = "pet-wallet";
 var $health = atom4({ state: "checking", version: null, schema_version: null, detail: null });
 var $ingest = atom4({ unavailable: false, queued: 0, deadLetters: 0, dropped: 0 });
 var $bubbleProviders = atom4([]);
@@ -2984,8 +3295,11 @@ async function loadUiConfig(rest) {
   return { ...DEFAULT_UI_CONFIG };
 }
 async function probeHealth(ctx) {
+  const scope = `${host.state?.connectionId?.get?.() ?? "local"}:${host.state?.profile?.get?.() ?? "default"}`;
+  const currentScope = () => `${host.state?.connectionId?.get?.() ?? "local"}:${host.state?.profile?.get?.() ?? "default"}`;
   try {
     const data = await ctx.rest("/health");
+    if (scope !== currentScope()) return;
     $health.set({
       state: data && data.ok ? "ok" : "degraded",
       version: data?.version ?? null,
@@ -2993,6 +3307,7 @@ async function probeHealth(ctx) {
       detail: data?.ledger_error ?? null
     });
   } catch (err) {
+    if (scope !== currentScope()) return;
     $health.set({ state: "unreachable", version: null, schema_version: null, detail: String(err?.message || err || "unknown") });
   }
 }
@@ -3036,15 +3351,47 @@ function attachSoundEngine(controller, sound = {}) {
 }
 var main_default = {
   id: ID,
-  name: "Whale Widget",
+  name: "Pet Wallet",
   register(ctx) {
     const normalizer = createNormalizer();
-    const tracker = createTurnTracker();
+    let tracker = createTurnTracker();
     const restPost = (path, body) => ctx.rest(path, { method: "POST", body: JSON.stringify(body) });
     const restGet = (path) => ctx.rest(path);
-    const dataService = createDataService({ rest: (path) => ctx.rest(path) });
+    const getOwner = () => JSON.stringify([host.state?.connectionId?.get?.() ?? "local", host.state?.profile?.get?.() ?? "default"]);
+    const trackers = /* @__PURE__ */ new Map([[getOwner(), tracker]]);
+    let profileEpoch = 0;
+    let balanceAllAvailable = true;
+    let lastBalanceAllAt = 0;
+    const getScope = () => `${profileEpoch}:${host.state?.connectionId?.get?.() ?? "local"}:${host.state?.profile?.get?.() ?? "default"}`;
+    const dataService = createDataService({ rest: (path) => ctx.rest(path), getScope });
+    const clearProfileData = () => {
+      profileEpoch += 1;
+      if (!trackers.has(getOwner())) trackers.set(getOwner(), createTurnTracker());
+      tracker = trackers.get(getOwner());
+      client.selectScope();
+      balanceAllAvailable = true;
+      lastBalanceAllAt = 0;
+      $balance.set(null);
+      $summary.set(null);
+      $dashboard.set({ state: "checking", detail: null });
+      $health.set({ state: "checking", version: null, schema_version: null, detail: null });
+      $bubbleProviders.set([]);
+      $bubbleBalanceText.set(null);
+      dataService.start(DEFAULT_UI_CONFIG);
+      const scope = getScope();
+      void loadUiConfig((path) => ctx.rest(path)).then((config) => {
+        if (scope !== getScope()) return;
+        $bubbleProviders.set(normalizeSelectedProviders(config?.bubble?.balance_providers));
+      });
+      void dataService._refreshers.refreshBalance();
+      void dataService._refreshers.refreshSummary();
+    };
+    for (const store of [host.state?.profile, host.state?.connectionId]) {
+      if (typeof store?.listen === "function") ctx.onDispose?.(store.listen(clearProfileData));
+    }
     const controller = createWhaleController();
-    const client = createIngestClient({
+    const client = createScopedIngestClient({
+      getScope: getOwner,
       rest: restPost,
       onUnavailable: () => publishIngestStats(client),
       onRecovered: () => publishIngestStats(client),
@@ -3072,6 +3419,7 @@ var main_default = {
       }
     };
     const pollWaitState = async () => {
+      const scope = getScope();
       let question = false;
       let approval = false;
       try {
@@ -3082,26 +3430,52 @@ var main_default = {
         question = approval = false;
       }
       try {
+        if (scope !== getScope()) return;
         controller.syncWaiting({ question, approval });
       } catch {
       }
     };
     const pollNotifications = async () => {
+      const scope = getScope();
       try {
         const data = await ctx.rest(NOTIFICATIONS_PATH);
+        if (scope !== getScope()) return;
         controller.syncNotifications(data?.notifications);
       } catch {
       }
     };
+    let currentSessionProvider = null;
+    let currentSessionModel = null;
+    let lastUserActivityAt = Date.now();
+    const IDLE_BUBBLE_MIN_INTERVAL_MS = 6 * 60 * 1e3;
+    let lastIdleBubbleAt = Date.now();
+    const checkIdleBubble = () => {
+      const now = Date.now();
+      if (now - lastUserActivityAt >= 6e4 && now - lastIdleBubbleAt >= IDLE_BUBBLE_MIN_INTERVAL_MS) {
+        lastIdleBubbleAt = now;
+        try {
+          controller.triggerIdleBubble();
+        } catch {
+        }
+      }
+    };
     const handleGatewayEvent = (raw) => {
+      lastUserActivityAt = Date.now();
+      const profile = host.state?.profile?.get?.() ?? "default";
+      if (typeof raw?.profile === "string" && raw.profile !== profile) return;
       const events = normalizer.normalize(raw);
       if (events.length === 0) return;
       const meta = {
         receivedAt: Date.now(),
         model: host.state?.model ?? null,
-        profile: raw?.profile ?? host.state?.profile ?? null
+        profile: raw?.profile ?? profile
       };
       for (const event of events) {
+        if (event.kind === "SESSION_INFO") {
+          if (event.provider) currentSessionProvider = event.provider;
+          if (event.model) currentSessionModel = event.model;
+          void refreshProviderBalances(true);
+        }
         if (event.kind === "CONNECTION_CHANGED") {
           if (event.phase === "reconnecting") {
             markReconnecting(tracker);
@@ -3149,9 +3523,8 @@ var main_default = {
       }
       void pollWaitState();
       void pollNotifications();
+      checkIdleBubble();
     }, WAIT_POLL_MS);
-    let balanceAllAvailable = true;
-    let lastBalanceAllAt = 0;
     const fallbackBalanceText = () => {
       const bal = $balance.get?.() ?? null;
       return bal?.observed_balance_units != null ? formatMoney(bal.observed_balance_units, { currency: bal.currency ?? void 0 }) : null;
@@ -3172,11 +3545,26 @@ var main_default = {
       const ts = Date.now();
       if (!force && ts - lastBalanceAllAt < BALANCE_ALL_MIN_INTERVAL_MS) return;
       lastBalanceAllAt = ts;
+      const scope = getScope();
       try {
         const data = await restGet(BALANCE_ALL_PATH);
+        if (scope !== getScope()) return;
         const rows = Array.isArray(data?.providers) ? data.providers : [];
-        $bubbleBalanceText.set(bubbleBalanceText(visibleBalanceProviders(rows, $bubbleProviders.get?.() ?? [])));
+        let activeText = null;
+        if (currentSessionProvider) {
+          const norm = String(currentSessionProvider).toLowerCase();
+          const match = rows.find((r) => {
+            const pid = String(r.provider_id || "").toLowerCase();
+            return pid === norm || norm.includes("codex") && pid === "openai-codex" || norm.includes("deepseek") && pid === "deepseek";
+          });
+          if (match && match.configured) activeText = providerBalanceText(match);
+        }
+        if (!activeText) {
+          activeText = bubbleBalanceText(visibleBalanceProviders(rows, $bubbleProviders.get?.() ?? []));
+        }
+        $bubbleBalanceText.set(activeText);
       } catch {
+        if (scope !== getScope()) return;
         balanceAllAvailable = false;
         $bubbleBalanceText.set(null);
       }
@@ -3201,10 +3589,13 @@ var main_default = {
       $bubble,
       doc: typeof document !== "undefined" ? document : null,
       resolve: createResolver(),
-      raf: typeof requestAnimationFrame === "function" ? (fn) => requestAnimationFrame(fn) : null
+      raf: typeof requestAnimationFrame === "function" ? (fn) => requestAnimationFrame(fn) : null,
+      onOpenDashboard: typeof host?.navigate === "function" ? () => host.navigate("/pet-wallet") : null
     });
     petLayer.start();
+    const configScope = getScope();
     void loadUiConfig((path) => ctx.rest(path)).then((config) => {
+      if (configScope !== getScope()) return;
       dataService.start(config);
       $bubbleProviders.set(normalizeSelectedProviders(config?.bubble?.balance_providers));
       try {
@@ -3213,12 +3604,15 @@ var main_default = {
         if (config?.pane?.enabled === true) registerPane();
       } catch {
       }
-    }, () => dataService.start({ ...DEFAULT_UI_CONFIG }));
+    }, () => {
+      if (configScope === getScope()) dataService.start({ ...DEFAULT_UI_CONFIG });
+    });
     try {
       ctx.onDispose?.(() => {
         clearInterval(timer);
         clearInterval(uiTimer);
         dataService.stop();
+        client.dispose();
         petLayer.stop();
         for (const unsubscribe of unsubscribes) {
           try {
@@ -3243,7 +3637,7 @@ var main_default = {
       ctx.register({
         id: PANE_ID,
         area: PANES_AREA,
-        title: "Whale Wallet \u7BA1\u5BB6",
+        title: "Pet Wallet \u7BA1\u5BB6",
         order: 0,
         data: { placement: "floating", anchor: "bottom-right", width: "280px" },
         render: () => jsx5(WhalePane, { $balance, $summary, $dashboard, $whale, $bubble, controller })
@@ -3256,7 +3650,7 @@ var main_default = {
       render: () => dashboard.wrapChip(renderWhaleChip($health, $ingest))
     });
     try {
-      host.notify?.({ message: "Whale Wallet \u7BA1\u5BB6\u5DF2\u52A0\u8F7D\uFF08\u89D2\u8272 = Hermes \u5185\u7F6E\u5BA0\u7269\uFF1Busage capture \u2192 ledger ingest + \u968F\u8EAB\u8D26\u672C\u9762\u677F\uFF09" });
+      host.notify?.({ message: "Pet Wallet \u7BA1\u5BB6\u5DF2\u52A0\u8F7D\uFF08\u89D2\u8272 = Hermes \u5185\u7F6E Pet\uFF1Busage capture \u2192 ledger ingest + \u968F\u8EAB\u8D26\u672C\u9762\u677F\uFF09" });
     } catch {
     }
   }

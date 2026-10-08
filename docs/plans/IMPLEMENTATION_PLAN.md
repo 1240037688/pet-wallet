@@ -668,3 +668,14 @@ tools/
 - 每个 Milestone 完成后：更新 WORKLOG → 若实现与本文有偏差，**先改本文再继续编码**。
 - 决策变更走 [AD] DR 修订规则（新增 DR-x 修订行，不改写历史）。
 - 本文的「未验证」条目在探查后必须就地更新为结论 + 日期，或移入 §7 风险登记簿。
+
+## 2026-10-07 当前修复计划状态
+
+插件源码完成 Wallet 当前 profile 可用性检查、缓存隔离与延迟响应防污染。保留仅 default 安装，code 不自动安装或启用。下一步须逐次授权核心通用 profile 请求分派补丁、部署桌面产物、重启实际后端并验证 default 的五个 REST 端点及 code 的明确未安装提示；未通过真实验收前不标记全部完成。
+
+
+## 2026-10-07 续修：已安装 profile 独立运行
+
+用户已明确授权默认及 code 等 profile 的复制安装验证。默认/其他 profile 各自正常运行，账本、配置、模块缓存和桌面查询分隔。新增 scoped-ingest-client.js，以连接和 profile 隔离队列、重试及迟到的结算回调；轮次跟踪器按 profile 保存，旧等待/通知响应不得污染新页面。共享后端通过通用请求 profile gate 与每 profile PluginHost 服务，转发保留原客户端身份。核心需 5 个文件（web_server.py、web_server_dashboard.py、web_server_plugin_requests.py、plugin_host.py、plugin_host_child.py），后两个文件保留写接口的 loopback 限制。
+
+JS 244 项、Python 198 项通过；真实 Whale 插件在临时 default/code 复制安装验证，从 default 和 code 两种启动 profile 下，五个端点均 200；16 次并发配置读取隔离，轮次账本隔离与重复提交幂等，远程写 403、未认证 401、未安装/未知 profile 404。实际桌面安装需要运行备份部署脚本并重启验收；测试通过不代表实际部署成功。

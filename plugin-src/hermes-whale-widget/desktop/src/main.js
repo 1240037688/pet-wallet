@@ -60,7 +60,7 @@ import {
   markReconnecting,
   markReconnected,
 } from './core/turn-tracker.js'
-import { createIngestClient } from './core/ingest-client.js'
+import { createScopedIngestClient } from './core/scoped-ingest-client.js'
 import { createSoundEngine } from './sound/engine.js'
 import { createPetLayer } from './ui/pet-layer.js'
 import { createResolver } from './ui/bubble/resolver.js'
@@ -75,7 +75,7 @@ import {
 export { $whale, $bubble }
 export { $balance, $summary, $dashboard }
 
-const ID = 'whale-widget'
+const ID = 'pet-wallet'
 
 // Chip-visible connectivity state: { state: 'checking'|'ok'|'unreachable', version, schema_version, detail }
 export const $health = atom({ state: 'checking', version: null, schema_version: null, detail: null })
@@ -144,8 +144,11 @@ async function loadUiConfig(rest) {
 }
 
 export async function probeHealth(ctx) {
+  const scope = `${host.state?.connectionId?.get?.() ?? 'local'}:${host.state?.profile?.get?.() ?? 'default'}`
+  const currentScope = () => `${host.state?.connectionId?.get?.() ?? 'local'}:${host.state?.profile?.get?.() ?? 'default'}`
   try {
     const data = await ctx.rest('/health')
+    if (scope !== currentScope()) return
     $health.set({
       state: data && data.ok ? 'ok' : 'degraded',
       version: data?.version ?? null,
@@ -153,6 +156,7 @@ export async function probeHealth(ctx) {
       detail: data?.ledger_error ?? null,
     })
   } catch (err) {
+    if (scope !== currentScope()) return
     $health.set({ state: 'unreachable', version: null, schema_version: null, detail: String(err?.message || err || 'unknown') })
   }
 }
@@ -217,20 +221,52 @@ function attachSoundEngine(controller, sound = {}) {
 
 export default {
   id: ID,
-  name: 'Whale Widget',
+  name: 'Pet Wallet',
   register(ctx) {
     const normalizer = createNormalizer()
-    const tracker = createTurnTracker()
+    let tracker = createTurnTracker()
 
     // ctx.rest adapter — POST/PUT shape (method/body JSON) mirrors the fetch-style
     // opts bag; exact production shape re-verified at the M5 real-machine smoke.
     const restPost = (path, body) => ctx.rest(path, { method: 'POST', body: JSON.stringify(body) })
     const restGet = (path) => ctx.rest(path)
 
-    const dataService = createDataService({ rest: (path) => ctx.rest(path) })
+    const getOwner = () => JSON.stringify([host.state?.connectionId?.get?.() ?? 'local', host.state?.profile?.get?.() ?? 'default'])
+    const trackers = new Map([[getOwner(), tracker]])
+    let profileEpoch = 0
+    let balanceAllAvailable = true
+    let lastBalanceAllAt = 0
+    const getScope = () => `${profileEpoch}:${host.state?.connectionId?.get?.() ?? 'local'}:${host.state?.profile?.get?.() ?? 'default'}`
+    const dataService = createDataService({ rest: (path) => ctx.rest(path), getScope })
+    const clearProfileData = () => {
+      profileEpoch += 1
+      if (!trackers.has(getOwner())) trackers.set(getOwner(), createTurnTracker())
+      tracker = trackers.get(getOwner())
+      client.selectScope()
+      balanceAllAvailable = true
+      lastBalanceAllAt = 0
+      $balance.set(null)
+      $summary.set(null)
+      $dashboard.set({ state: 'checking', detail: null })
+      $health.set({ state: 'checking', version: null, schema_version: null, detail: null })
+      $bubbleProviders.set([])
+      $bubbleBalanceText.set(null)
+      dataService.start(DEFAULT_UI_CONFIG)
+      const scope = getScope()
+      void loadUiConfig((path) => ctx.rest(path)).then(config => {
+        if (scope !== getScope()) return
+        $bubbleProviders.set(normalizeSelectedProviders(config?.bubble?.balance_providers))
+      })
+      void dataService._refreshers.refreshBalance()
+      void dataService._refreshers.refreshSummary()
+    }
+    for (const store of [host.state?.profile, host.state?.connectionId]) {
+      if (typeof store?.listen === 'function') ctx.onDispose?.(store.listen(clearProfileData))
+    }
     const controller = createWhaleController()
 
-    const client = createIngestClient({
+    const client = createScopedIngestClient({
+      getScope: getOwner,
       rest: restPost,
       onUnavailable: () => publishIngestStats(client),
       onRecovered: () => publishIngestStats(client),
@@ -267,6 +303,7 @@ export default {
      *  read never matched and silently disabled waiting). Slots present →
      *  sticky waiting bubble + mood; 404/failure → no waiting (defensive). */
     const pollWaitState = async () => {
+      const scope = getScope()
       let question = false
       let approval = false
       try {
@@ -277,6 +314,7 @@ export default {
         question = approval = false
       }
       try {
+        if (scope !== getScope()) return
         controller.syncWaiting({ question, approval })
       } catch {
         /* UI must never break the poll loop */
@@ -287,23 +325,51 @@ export default {
      *  kinds are filtered controller-side (wait-state chain owns them);
      *  endpoint absence (older Python half) is tolerated silently. */
     const pollNotifications = async () => {
+      const scope = getScope()
       try {
         const data = await ctx.rest(NOTIFICATIONS_PATH)
+        if (scope !== getScope()) return
         controller.syncNotifications(data?.notifications)
       } catch {
         /* no consumer endpoint / transient failure — keep last known bubbles */
       }
     }
 
+    let currentSessionProvider = null
+    let currentSessionModel = null
+    let lastUserActivityAt = Date.now()
+    const IDLE_BUBBLE_MIN_INTERVAL_MS = 6 * 60 * 1000 // 6 min
+    let lastIdleBubbleAt = Date.now()
+
+    const checkIdleBubble = () => {
+      const now = Date.now()
+      if (now - lastUserActivityAt >= 60_000 && now - lastIdleBubbleAt >= IDLE_BUBBLE_MIN_INTERVAL_MS) {
+        lastIdleBubbleAt = now
+        try {
+          controller.triggerIdleBubble()
+        } catch {
+          /* cosmetic */
+        }
+      }
+    }
+
     const handleGatewayEvent = (raw) => {
+      lastUserActivityAt = Date.now()
+      const profile = host.state?.profile?.get?.() ?? 'default'
+      if (typeof raw?.profile === 'string' && raw.profile !== profile) return
       const events = normalizer.normalize(raw)
       if (events.length === 0) return
       const meta = {
         receivedAt: Date.now(),
         model: host.state?.model ?? null,
-        profile: raw?.profile ?? host.state?.profile ?? null,
+        profile: raw?.profile ?? profile,
       }
       for (const event of events) {
+        if (event.kind === 'SESSION_INFO') {
+          if (event.provider) currentSessionProvider = event.provider
+          if (event.model) currentSessionModel = event.model
+          void refreshProviderBalances(true)
+        }
         if (event.kind === 'CONNECTION_CHANGED') {
           if (event.phase === 'reconnecting') {
             markReconnecting(tracker)
@@ -367,6 +433,7 @@ export default {
       }
       void pollWaitState()
       void pollNotifications()
+      checkIdleBubble()
     }, WAIT_POLL_MS)
 
     // ── data service: config-driven polling + optional sound engine ─────────
@@ -379,9 +446,6 @@ export default {
     // dashboard page's show/hide toggles persist). An older Python half
     // (endpoint absent) or any failure falls back to the single GET /balance
     // atom feed; controller.setData's contract is unchanged.
-    let balanceAllAvailable = true
-    let lastBalanceAllAt = 0
-
     const fallbackBalanceText = () => {
       const bal = $balance.get?.() ?? null
       return bal?.observed_balance_units != null
@@ -411,11 +475,26 @@ export default {
       const ts = Date.now()
       if (!force && ts - lastBalanceAllAt < BALANCE_ALL_MIN_INTERVAL_MS) return
       lastBalanceAllAt = ts
+      const scope = getScope()
       try {
         const data = await restGet(BALANCE_ALL_PATH)
+        if (scope !== getScope()) return
         const rows = Array.isArray(data?.providers) ? data.providers : []
-        $bubbleBalanceText.set(bubbleBalanceText(visibleBalanceProviders(rows, $bubbleProviders.get?.() ?? [])))
+        let activeText = null
+        if (currentSessionProvider) {
+          const norm = String(currentSessionProvider).toLowerCase()
+          const match = rows.find((r) => {
+            const pid = String(r.provider_id || '').toLowerCase()
+            return pid === norm || (norm.includes('codex') && pid === 'openai-codex') || (norm.includes('deepseek') && pid === 'deepseek')
+          })
+          if (match && match.configured) activeText = providerBalanceText(match)
+        }
+        if (!activeText) {
+          activeText = bubbleBalanceText(visibleBalanceProviders(rows, $bubbleProviders.get?.() ?? []))
+        }
+        $bubbleBalanceText.set(activeText)
       } catch {
+        if (scope !== getScope()) return
         // 404 (older half) or outage → single /balance fallback (and stay there
         // until reload; a dashboard outage must not double the poll traffic)
         balanceAllAvailable = false
@@ -450,10 +529,13 @@ export default {
       doc: typeof document !== 'undefined' ? document : null,
       resolve: createResolver(),
       raf: typeof requestAnimationFrame === 'function' ? (fn) => requestAnimationFrame(fn) : null,
+      onOpenDashboard: typeof host?.navigate === 'function' ? () => host.navigate('/pet-wallet') : null,
     })
     petLayer.start()
 
+    const configScope = getScope()
     void loadUiConfig((path) => ctx.rest(path)).then((config) => {
+      if (configScope !== getScope()) return
       dataService.start(config)
       // WP-dashboard: seed the bubble show-list from config (runtime mirror;
       // the dashboard page keeps it fresh after every PUT /config)
@@ -467,13 +549,14 @@ export default {
       } catch {
         /* audio/pane are cosmetic — never block the widget */
       }
-    }, () => dataService.start({ ...DEFAULT_UI_CONFIG }))
+    }, () => { if (configScope === getScope()) dataService.start({ ...DEFAULT_UI_CONFIG }) })
 
     try {
       ctx.onDispose?.(() => {
         clearInterval(timer)
         clearInterval(uiTimer)
         dataService.stop()
+        client.dispose()
         petLayer.stop()
         for (const unsubscribe of unsubscribes) {
           try {
@@ -508,7 +591,7 @@ export default {
       ctx.register({
         id: PANE_ID,
         area: PANES_AREA,
-        title: 'Whale Wallet 管家',
+        title: 'Pet Wallet 管家',
         order: 0,
         data: { placement: 'floating', anchor: 'bottom-right', width: '280px' },
         render: () => jsx(WhalePane, { $balance, $summary, $dashboard, $whale, $bubble, controller }),
@@ -524,7 +607,7 @@ export default {
 
     // self-check toast (M1 pipeline + M5/M6/M7/M8-A surface; DR-15 de-roling)
     try {
-      host.notify?.({ message: 'Whale Wallet 管家已加载（角色 = Hermes 内置宠物；usage capture → ledger ingest + 随身账本面板）' })
+      host.notify?.({ message: 'Pet Wallet 管家已加载（角色 = Hermes 内置 Pet；usage capture → ledger ingest + 随身账本面板）' })
     } catch {
       /* toast is best-effort */
     }

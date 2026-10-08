@@ -15,7 +15,7 @@ def test_health_returns_schema_version(client):
     assert res.status_code == 200
     body = res.json()
     assert body["ok"] is True
-    assert body["plugin"] == "whale-widget"
+    assert body["plugin"] == "pet-wallet"
     assert body["schema_version"] == SCHEMA_VERSION
     assert body["track3_state"] == "not_implemented"  # M2 replaces this
     assert body["contract_probe"] is None
@@ -32,8 +32,8 @@ def test_meta_reports_plugin_metadata(client):
     res = client.get(f"{MOUNT_PREFIX}/meta")
     assert res.status_code == 200
     body = res.json()
-    assert body["name"] == "whale-widget"
-    assert body["label"] == "Whale Widget"
+    assert body["name"] == "pet-wallet"
+    assert body["label"] == "Pet Wallet"
     assert body["api"] == "plugin_api.py"
     assert body["mounted_at"] == MOUNT_PREFIX
     assert body["schema_version"] == SCHEMA_VERSION
@@ -66,7 +66,7 @@ def test_write_endpoints_reject_non_loopback(client_strict_loopback):
 
 def test_health_survives_corrupt_db(client, hermes_home):
     """Fail-closed (DATA_MODEL §7.4): corrupt whale.db → ok:false + ledger_error, still 200."""
-    db_path = hermes_home / "whale-widget" / "whale.db"
+    db_path = hermes_home / "pet-wallet" / "pet-wallet.db"
     client.get(f"{MOUNT_PREFIX}/health")  # create the db first
     assert db_path.exists()
 
@@ -83,6 +83,6 @@ def test_health_survives_corrupt_db(client, hermes_home):
     assert body["ok"] is False
     assert "ledger_error" in body
     # the corrupt file must have been quarantined, not overwritten
-    leftovers = list(db_path.parent.glob("whale.db.corrupt-*"))
+    leftovers = list(db_path.parent.glob("pet-wallet.db.corrupt-*"))
     assert leftovers, "corrupt db was not quarantined"
     assert find_bare_money_keys(body) == []

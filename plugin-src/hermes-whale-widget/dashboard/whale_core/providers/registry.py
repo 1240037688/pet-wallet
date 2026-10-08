@@ -11,8 +11,12 @@ from __future__ import annotations
 from typing import Any
 
 from .deepseek import DeepSeekProvider
+from .codex import CodexProvider
 
-_PROVIDERS: dict[str, type] = {DeepSeekProvider.id: DeepSeekProvider}
+_PROVIDERS: dict[str, type] = {
+    DeepSeekProvider.id: DeepSeekProvider,
+    CodexProvider.id: CodexProvider,
+}
 
 
 def get_provider(provider_id: str) -> Any:

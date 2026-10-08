@@ -48,9 +48,9 @@ def _unquoted_colon_lines(path: Path) -> list[str]:
 
 def test_plugin_yaml_parses_and_matches_hermes_schema():
     data = yaml.safe_load((PLUGIN_ROOT / "plugin.yaml").read_text(encoding="utf-8"))
-    assert data["name"] == "whale-widget"
+    assert data["name"] == "pet-wallet"
     assert data["version"] == "0.1.0"
-    assert isinstance(data["description"], str) and data["description"].startswith("Whale accounting widget")
+    assert isinstance(data["description"], str) and data["description"].startswith("Pet Wallet accounting widget")
     # Hermes reads this exact key for agent-half hook declarations
     assert data["provides_hooks"] == ["pre_approval_request", "post_approval_response"]
     unknown = set(data) - MANIFEST_KEYS_KNOWN_TO_HERMES
@@ -66,6 +66,6 @@ def test_no_yaml_scalar_carries_an_unquoted_mapping_tripwire():
 
 def test_catalog_yaml_required_fields():
     data = yaml.safe_load((PLUGIN_ROOT / "catalog" / "whale-widget.yaml").read_text(encoding="utf-8"))
-    assert data["name"] == "whale-widget"
+    assert data["name"] == "pet-wallet"
     # SHA must stay quoted — all-digit pin would parse as a YAML integer (M13 note)
     assert isinstance(data["sha"], str)

@@ -32,7 +32,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-_PLUGIN_DIR_NAME = "whale-widget"
+_PLUGIN_DIR_NAME = "pet-wallet"
 
 CONFIG_FILENAME = "config.json"
 

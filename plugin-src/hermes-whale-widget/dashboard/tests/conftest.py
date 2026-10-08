@@ -17,8 +17,8 @@ from fastapi.testclient import TestClient
 
 DASHBOARD_DIR = Path(__file__).resolve().parents[1]
 PLUGIN_API_PATH = DASHBOARD_DIR / "plugin_api.py"
-PLUGIN_MODULE_NAME = "hermes_dashboard_plugin_whale-widget"
-MOUNT_PREFIX = "/api/plugins/whale-widget"
+PLUGIN_MODULE_NAME = "hermes_dashboard_plugin_pet-wallet"
+MOUNT_PREFIX = "/api/plugins/pet-wallet"
 
 # collection-time bootstrap: test modules import whale_core at module scope,
 # and conftest.py is imported before any of them

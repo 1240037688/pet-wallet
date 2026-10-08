@@ -1,7 +1,7 @@
 {
-  "name": "whale-widget",
-  "label": "Whale Widget",
-  "description": "Whale accounting widget — dual-track usage/balance ledger per profile",
+  "name": "pet-wallet",
+  "label": "Pet Wallet",
+  "description": "Pet Wallet accounting widget — dual-track usage/balance ledger per profile",
   "icon": "Pulse",
   "version": "0.1.0",
   "api": "plugin_api.py"

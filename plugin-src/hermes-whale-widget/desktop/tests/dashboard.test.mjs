@@ -77,6 +77,19 @@ test('providerBalanceText: symbol currencies → `deepseek ¥1.10`', () => {
   assert.equal(providerBalanceText({ provider_id: 'x', observed_balance_units: UNITS_110, currency: 'USD' }), 'x $1.10')
 })
 
+test('providerBalanceText: quota row formats session and weekly percentages', () => {
+  const quotaRow = {
+    provider_id: 'openai-codex',
+    kind: 'quota',
+    name: 'Codex',
+    windows: [
+      { label: 'Session', used_percent: 25, remaining_percent: 75 },
+      { label: 'Weekly', used_percent: 32, remaining_percent: 68 },
+    ],
+  }
+  assert.equal(providerBalanceText(quotaRow), 'Codex 5h剩75% · 周剩68%')
+})
+
 test('providerBalanceText: unknown currency keeps the code; unobserved → —', () => {
   assert.equal(providerBalanceText({ provider_id: 'x', observed_balance_units: UNITS_110, currency: 'XYZ' }), 'x 1.10 XYZ')
   assert.equal(providerBalanceText({ provider_id: 'x', currency: 'CNY' }), 'x —')
@@ -168,6 +181,28 @@ test('providerCards: configured-but-unobserved → — (never a fabricated 0)', 
   assert.equal(card.tone, 'unknown')
   assert.equal(card.amountText, '—')
   assert.equal(card.badge, null)
+})
+
+test('providerCards: quota type maps windows, plan and details', () => {
+  const row = {
+    provider_id: 'openai-codex',
+    name: 'ChatGPT / Codex',
+    kind: 'quota',
+    configured: true,
+    state: 'ok',
+    plan: 'Plus',
+    windows: [
+      { label: 'Session', used_percent: 25, remaining_percent: 75, reset_at: null },
+      { label: 'Weekly', used_percent: 30, remaining_percent: 70, reset_at: null },
+    ],
+    details: ['You have 3 resets banked'],
+  }
+  const [card] = providerCards([row], [])
+  assert.equal(card.kind, 'quota')
+  assert.equal(card.name, 'ChatGPT / Codex')
+  assert.equal(card.plan, 'Plus')
+  assert.equal(card.windows.length, 2)
+  assert.equal(card.tone, 'ok')
 })
 
 test('providerCards: unconfigured → — + guidance, no credential fields surfaced', () => {
@@ -269,19 +304,19 @@ test('createDashboard: routes page + sidebar.nav contributions match the app con
     atoms: { $health: { get: () => ({ state: 'ok' }) }, $bubbleProviders: { get: () => [] } },
   })
   assert.equal(contribution.area, 'routes')
-  assert.equal(contribution.title, ROUTE_TITLE)
+  assert.equal(contribution.title, 'Pet Wallet')
   assert.equal(contribution.data.path, ROUTE_PATH)
-  assert.equal(ROUTE_PATH, '/whale') // one segment, no params (app/routes.ts)
+  assert.equal(ROUTE_PATH, '/pet-wallet') // one segment, no params (app/routes.ts)
   assert.equal(typeof contribution.render, 'function')
   const vnode = contribution.render()
   assert.equal(typeof vnode.type, 'function') // SDK renders the page component
   assert.equal(navContribution.area, 'sidebar.nav')
   assert.equal(navContribution.data.path, ROUTE_PATH)
-  assert.equal(navContribution.data.label, ROUTE_TITLE)
+  assert.equal(navContribution.data.label, 'Pet Wallet')
   assert.equal(typeof navContribution.data.codicon, 'string')
 })
 
-test('createDashboard: chip wrapper navigates to /whale when host.navigate exists', async () => {
+test('createDashboard: chip wrapper navigates to /pet-wallet when host.navigate exists', async () => {
   const navigated = []
   const host = { navigate: (path) => navigated.push(path) }
   const { wrapChip } = createDashboard({ rest: async () => ({}), host, atoms: {} })
@@ -292,7 +327,7 @@ test('createDashboard: chip wrapper navigates to /whale when host.navigate exist
   assert.equal(rendered.type, 'span')
   assert.equal(typeof rendered.props.onClick, 'function')
   rendered.props.onClick({ preventDefault: () => {} })
-  assert.deepEqual(navigated, ['/whale'])
+  assert.deepEqual(navigated, ['/pet-wallet'])
 })
 
 test('createDashboard: chip wrapper degrades to a plain span without host.navigate', async () => {

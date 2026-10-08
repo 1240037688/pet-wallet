@@ -28,7 +28,7 @@ function makeCtx({ restImpl } = {}) {
       // a partial restImpl may return undefined to fall through to the defaults
       const custom = restImpl ? restImpl(p, opts) : undefined
       if (custom !== undefined) return custom
-      if (p === '/health') return { ok: true, plugin: 'whale-widget', version: '0.1.0', schema_version: 1 }
+      if (p === '/health') return { ok: true, plugin: 'pet-wallet', version: '0.1.0', schema_version: 1 }
       if (p === '/config') return { balance_poll_seconds: 60, usage_summary_poll_seconds: 30 }
       if (p === '/balance') return { state: 'ok', observed_balance_units: 11_000_000_000, currency: 'CNY', credential: { configured: true } }
       if (p === '/balance/all') {
@@ -110,7 +110,7 @@ test('floating pane contribution: area panes + native floating data + WhalePane 
   assert.ok(pane, 'pane contribution registered (chip stays separate)')
   assert.equal(pane.area, 'panes')
   assert.deepEqual(pane.data, PANE_DATA)
-  assert.equal(pane.title, 'Whale Wallet 管家') // de-roled ledger panel title (DR-15)
+  assert.equal(pane.title, 'Pet Wallet 管家') // de-roled ledger panel title (DR-15)
   assert.ok(registered.some((c) => c.id === 'chip' && c.area === 'statusBar.right'), 'statusbar chip kept')
 
   // render() yields a WhalePane component element; invoking it with the shim
@@ -142,7 +142,7 @@ test('config → data service start: /config fetched then /balance + /usage/summ
   assert.equal(mod.$dashboard.get().state, 'ok')
 })
 
-test('WP-dashboard: routes page + sidebar.nav row registered for /whale', async (t) => {
+test('WP-dashboard: routes page + sidebar.nav row registered for /pet-wallet', async (t) => {
   register('./loader.mjs', import.meta.url)
   const mod = await import('../plugin.js')
   const { ctx, registered, disposed } = makeCtx()
@@ -154,19 +154,19 @@ test('WP-dashboard: routes page + sidebar.nav row registered for /whale', async 
   const page = registered.find((c) => c.id === 'dashboard')
   assert.ok(page, 'routes page contribution registered')
   assert.equal(page.area, 'routes')
-  assert.equal(page.title, 'Whale Wallet')
-  assert.deepEqual(page.data, { path: '/whale' })
+  assert.equal(page.title, 'Pet Wallet')
+  assert.deepEqual(page.data, { path: '/pet-wallet' })
   assert.equal(typeof page.render, 'function')
 
   const nav = registered.find((c) => c.id === 'nav')
   assert.ok(nav, 'sidebar nav contribution registered')
   assert.equal(nav.area, 'sidebar.nav')
-  assert.equal(nav.data.path, '/whale')
-  assert.equal(nav.data.label, 'Whale Wallet')
+  assert.equal(nav.data.path, '/pet-wallet')
+  assert.equal(nav.data.label, 'Pet Wallet')
   assert.equal(typeof nav.data.codicon, 'string')
 })
 
-test('WP-dashboard: chip click navigates to /whale (host.navigate feature-detected)', async (t) => {
+test('WP-dashboard: chip click navigates to /pet-wallet (host.navigate feature-detected)', async (t) => {
   register('./loader.mjs', import.meta.url)
   const { navigations } = await import('./shims/sdk-shim.mjs')
   const mod = await import('../plugin.js')
@@ -183,7 +183,7 @@ test('WP-dashboard: chip click navigates to /whale (host.navigate feature-detect
   assert.equal(rendered.type, 'span')
   assert.equal(typeof rendered.props.onClick, 'function')
   rendered.props.onClick({ preventDefault: () => {} })
-  assert.ok(navigations.includes('/whale'), 'chip click → host.navigate("/whale")')
+  assert.ok(navigations.includes('/pet-wallet'), 'chip click → host.navigate("/pet-wallet")')
 })
 
 test('WP-dashboard bubble: /balance/all rows → joined balance text (deepseek ¥1.10)', async (t) => {

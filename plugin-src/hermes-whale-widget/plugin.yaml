@@ -1,6 +1,6 @@
-name: whale-widget
+name: pet-wallet
 version: "0.1.0"
-description: "Whale accounting widget for Hermes — usage/balance ledger, floating whale and bubbles (unified package: agent approval observers + dashboard API + desktop UI)"
+description: "Pet Wallet accounting widget for Hermes — usage/balance ledger, pet bubbles and quota tracking"
 provides_hooks:
   - pre_approval_request
   - post_approval_response

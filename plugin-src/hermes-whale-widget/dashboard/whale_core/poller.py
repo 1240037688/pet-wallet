@@ -25,7 +25,7 @@ from .logging_setup import get_logger
 
 log = get_logger("poller")
 
-_DISABLE_ENV = "WHALE_WIDGET_DISABLE_POLLER"
+_DISABLE_ENVS = ("PET_WALLET_DISABLE_POLLER", "WHALE_WIDGET_DISABLE_POLLER")
 _WAKE_SLICE_S = 1.0  # stop responsiveness bound
 _PARKED_INTERVAL_S = 60.0  # credential re-check period while parked
 
@@ -38,7 +38,7 @@ def ensure_started(rt: Any) -> None:
     """Start the poller once (no-op when disabled by env or ledger corrupt)."""
     global _thread
     with _lock:
-        if os.environ.get(_DISABLE_ENV) == "1":
+        if any(os.environ.get(k) == "1" for k in _DISABLE_ENVS):
             return
         if _thread is not None and _thread.is_alive():
             return

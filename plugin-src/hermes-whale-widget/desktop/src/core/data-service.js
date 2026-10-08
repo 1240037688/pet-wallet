@@ -23,7 +23,7 @@ export const $dashboard = atom({ state: 'checking', detail: null })
 
 const clamp = (n, lo, hi) => Math.min(Math.max(n, lo), hi)
 
-export function createDataService({ rest, now = () => Date.now() } = {}) {
+export function createDataService({ rest, now = () => Date.now(), getScope = () => '' } = {}) {
   let balanceTimer = null
   let summaryTimer = null
   let lastSummaryRefresh = 0
@@ -32,23 +32,29 @@ export function createDataService({ rest, now = () => Date.now() } = {}) {
 
   async function refreshBalance() {
     if (disposed) return
+    const scope = getScope()
     try {
       const data = await rest('/balance')
+      if (disposed || scope !== getScope()) return
       $balance.set(data ?? null)
       $dashboard.set({ state: 'ok', detail: null })
     } catch (err) {
+      if (disposed || scope !== getScope()) return
       $dashboard.set({ state: 'unreachable', detail: String(err?.message || err || 'unknown') })
     }
   }
 
   async function refreshSummary() {
     if (disposed) return
+    const scope = getScope()
     lastSummaryRefresh = now()
     try {
       const data = await rest('/usage/summary')
+      if (disposed || scope !== getScope()) return
       $summary.set(data ?? null)
       $dashboard.set({ state: 'ok', detail: null })
     } catch (err) {
+      if (disposed || scope !== getScope()) return
       $dashboard.set({ state: 'unreachable', detail: String(err?.message || err || 'unknown') })
     }
   }

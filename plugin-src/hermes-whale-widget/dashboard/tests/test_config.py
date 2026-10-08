@@ -17,12 +17,12 @@ def test_missing_config_returns_defaults(hermes_home):
 
 def test_data_dir_respects_explicit_home(tmp_path):
     d = config.data_dir(tmp_path)
-    assert d == tmp_path / "whale-widget"
+    assert d == tmp_path / "pet-wallet"
     assert d.exists()
 
 
 def test_data_dir_respects_hermes_home_env(hermes_home):
-    assert config.data_dir() == hermes_home / "whale-widget"
+    assert config.data_dir() == hermes_home / "pet-wallet"
 
 
 def test_save_and_load_roundtrip_with_deep_merge(hermes_home):
@@ -31,7 +31,7 @@ def test_save_and_load_roundtrip_with_deep_merge(hermes_home):
     # untouched nested default survives
     assert merged["thresholds"]["daily_budget"] is None
     # file on disk holds the merged document
-    on_disk = json.loads((hermes_home / "whale-widget" / "config.json").read_text("utf-8"))
+    on_disk = json.loads((hermes_home / "pet-wallet" / "config.json").read_text("utf-8"))
     assert on_disk["thresholds"]["balance_low"] == 5.0
     # reload agrees
     assert config.load_config()["thresholds"]["balance_low"] == 5.0
@@ -114,7 +114,7 @@ def test_put_config_endpoint_merges_and_persists(client, hermes_home):
     assert body["bubbles"]["enabled"] is True
     # persisted: a fresh GET reflects the write
     assert client.get(f"{MOUNT_PREFIX}/config").json()["bubbles"]["turn_cost_ttl_ms"] == 8000
-    on_disk = json.loads((hermes_home / "whale-widget" / "config.json").read_text("utf-8"))
+    on_disk = json.loads((hermes_home / "pet-wallet" / "config.json").read_text("utf-8"))
     assert on_disk["bubbles"]["turn_cost_ttl_ms"] == 8000
 
 

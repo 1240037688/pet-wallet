@@ -96,4 +96,4 @@ def test_dismiss_validation_and_loopback(client_strict_loopback):
 def _whale_db():
     from whale_core import config as whale_config
 
-    return whale_config.data_dir() / "whale.db"
+    return whale_config.data_dir() / "pet-wallet.db"

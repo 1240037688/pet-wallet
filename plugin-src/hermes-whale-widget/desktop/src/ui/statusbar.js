@@ -39,9 +39,9 @@ export function WhaleChip({ $health, $ingest }) {
   const glyph = GLYPHS[health.state] ?? GLYPHS.checking
   return jsx('span', {
     className: 'whale-widget-chip',
-    title: 'Whale widget — dashboard connectivity',
+    title: 'Pet Wallet — dashboard connectivity',
     style: { display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'default' },
-    children: `${glyph} Whale widget · ${healthLabel(health)}${ingestLabel(ingest)}`,
+    children: `${glyph} Pet Wallet · ${healthLabel(health)}${ingestLabel(ingest)}`,
   })
 }
 

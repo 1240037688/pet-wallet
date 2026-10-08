@@ -1,4 +1,4 @@
-# AGENTS.md — hermes-whale-widget 操作规范
+# AGENTS.md — Pet Wallet (`pet-wallet`) 操作规范
 
 本文件是所有后续 coding agent 的长期操作规范。任何代码修改前必须先读完本文件。
 

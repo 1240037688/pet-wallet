@@ -139,3 +139,34 @@ def test_balance_all_never_includes_unconfigured(client, monkeypatch):
     resp = client.get(f"{MOUNT_PREFIX}/balance/all")
     assert resp.status_code == 200
     assert resp.json() == {"providers": []}
+
+
+def test_codex_quota_provider_mock(client, monkeypatch):
+    """Test Codex quota reporting when configured."""
+    from whale_core.providers.codex import CodexProvider
+
+    mock_res = {
+        "provider_id": "openai-codex",
+        "name": "ChatGPT / Codex",
+        "kind": "quota",
+        "configured": True,
+        "state": "ok",
+        "plan": "Plus",
+        "windows": [
+            {"label": "Session", "used_percent": 25.0, "remaining_percent": 75.0, "reset_at": None, "detail": None},
+            {"label": "Weekly", "used_percent": 30.0, "remaining_percent": 70.0, "reset_at": None, "detail": None},
+        ],
+        "details": ["You have 3 resets banked"],
+        "fetched_at": BASE_MS,
+    }
+    monkeypatch.setattr(CodexProvider, "fetch_quota", lambda self, **kw: mock_res)
+
+    resp = client.get(f"{MOUNT_PREFIX}/providers/status")
+    assert resp.status_code == 200
+    row = next(r for r in resp.json()["providers"] if r["provider_id"] == "openai-codex")
+    assert row["configured"] is True
+    assert row["kind"] == "quota"
+    assert row["plan"] == "Plus"
+    assert len(row["windows"]) == 2
+    assert row["windows"][0]["label"] == "Session"
+    assert row["windows"][0]["used_percent"] == 25.0

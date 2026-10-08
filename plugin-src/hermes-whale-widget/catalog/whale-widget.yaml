@@ -21,19 +21,20 @@
 #     half actually registers at the pinned commit — plugin.yaml already
 #     declares [pre_approval_request, post_approval_response] (M8, done);
 #     the `[]` below is still the draft value pending M13 admission check.
-name: whale-widget
-repo: "TBD-before-M13 (public https git URL of this plugin's repo)"
-sha: ""            # 40-hex pin of the tagged release commit; filled in M13
-description: Whale accounting widget — dual-track AI usage ledger (estimate vs
-  observed balance), floating whale with bubbles, budget/low-balance/waiting
-  reminders, per Hermes profile.
-maintainer: TBD
+name: pet-wallet
+repo: "https://github.com/1240037688/pet-wallet"
+sha: "e6c7a1a1be6652b0ce2bea5aec15d272774f7ae2"            # Exact 40-hex pin of the tagged release commit (v0.1.0)
+description: "Pet Wallet — Dual-track AI usage ledger (estimate vs observed balance), pet desktop bubbles, and live multi-provider quota tracking (Codex 5h/Weekly, DeepSeek) for Hermes."
+maintainer: "1240037688"
 tier: community
+category: desktop
 requires_hermes: ">=0.21"
-platforms: [windows]   # other platforms unverified; widen only after testing
-docs_url: "TBD-before-M13"
+platforms: [windows, macos, linux]
+docs_url: "https://github.com/1240037688/pet-wallet#readme"
 capabilities:
   provides_tools: []
-  provides_hooks: []      # M8: approval observation hooks (pre/post approval)
+  provides_hooks:
+    - pre_approval_request
+    - post_approval_response
   provides_middleware: []
   requires_env: []

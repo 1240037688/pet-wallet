@@ -125,7 +125,7 @@ export function tailCss(above) {
  * The layer. `doc` is injectable (node tests pass null → start() is a no-op);
  * `resolve` is a bubble resolver; `raf`/`interval` injectable for tests.
  */
-export function createPetLayer({ controller, $bubble, doc = null, resolve, now = () => Date.now(), raf = null, interval = null } = {}) {
+export function createPetLayer({ controller, $bubble, doc = null, resolve, now = () => Date.now(), raf = null, interval = null, onOpenDashboard = null } = {}) {
   const view = typeof document !== 'undefined' && !doc ? document : doc
   const resolver = resolve ?? null
   let started = false
@@ -200,9 +200,24 @@ export function createPetLayer({ controller, $bubble, doc = null, resolve, now =
     const tail = mk('div')
     tail.dataset.role = 'tail'
     bubbleEl.appendChild(tail)
+    bubbleEl.title = '单击切换 · 双击打开 Pet Wallet'
+    bubbleEl.style.cursor = 'pointer'
     bubbleEl.addEventListener('click', (e) => {
       e.stopPropagation()
-      controller.click()
+      if (typeof controller?.advance === 'function') {
+        const advanced = controller.advance()
+        if (!advanced && typeof controller?.click === 'function') controller.click()
+      } else if (typeof controller?.click === 'function') {
+        controller.click()
+      }
+    })
+    bubbleEl.addEventListener('dblclick', (e) => {
+      e.stopPropagation()
+      try {
+        onOpenDashboard?.()
+      } catch {
+        /* navigation best effort */
+      }
     })
     host.appendChild(bubbleEl)
     startFollow()

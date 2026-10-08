@@ -51,8 +51,8 @@ import {
 import { jsx } from 'react/jsx-runtime'
 import { formatMoney } from '../core/money.js'
 
-export const ROUTE_PATH = '/whale'
-export const ROUTE_TITLE = 'Whale Wallet'
+export const ROUTE_PATH = '/pet-wallet'
+export const ROUTE_TITLE = 'Pet Wallet'
 
 // Balance tone colors (balance-view.js semantics; moodAccent palette).
 export const TONE_COLORS = {
@@ -98,9 +98,19 @@ export function visibleBalanceProviders(rows, selectedIds) {
   return list.filter((row) => selected.includes(row.provider_id))
 }
 
-/** One provider row → `deepseek ¥1.10` (or `deepseek —` when unobserved). */
+/** One provider row → `deepseek ¥1.10` or `Codex 5h剩75% · 周剩68%` (or `—` when unobserved). */
 export function providerBalanceText(row) {
   if (!row || typeof row !== 'object' || typeof row.provider_id !== 'string') return null
+  if (row.kind === 'quota') {
+    const windows = Array.isArray(row.windows) ? row.windows : []
+    const winTexts = windows.map((w) => {
+      const rem = w.remaining_percent ?? (w.used_percent != null ? Math.max(0, 100 - w.used_percent) : null)
+      const lbl = w.label === 'Session' ? '5h' : w.label === 'Weekly' ? '周' : w.label
+      return rem != null ? `${lbl}剩${Math.round(rem)}%` : `${lbl}—`
+    })
+    const name = row.name ?? (row.provider_id === 'openai-codex' ? 'Codex' : row.provider_id)
+    return winTexts.length > 0 ? `${name} ${winTexts.join(' · ')}` : `${name} 额度正常`
+  }
   const units = row.observed_balance_units
   if (units === null || units === undefined || !Number.isFinite(Number(units))) {
     return `${row.provider_id} —`
@@ -155,7 +165,22 @@ export function providerCards(rows, selectedIds) {
         tone: 'unknown',
         amountText: '—',
         badge: null,
-        hint: '未配置凭据 — 配置后此处显示五状态余额',
+        hint: '未配置凭据 — 配置后此处显示五状态余额或配额',
+      }
+    }
+    if (row.kind === 'quota') {
+      return {
+        ...base,
+        kind: 'quota',
+        name: row.name ?? row.provider_id,
+        plan: row.plan ?? null,
+        windows: Array.isArray(row.windows) ? row.windows : [],
+        details: Array.isArray(row.details) ? row.details : [],
+        stateLabel: row.state === 'ok' ? (row.plan ? `${row.plan} 订阅` : '正常') : '未配置',
+        tone: row.state === 'ok' ? 'ok' : 'unknown',
+        amountText: null,
+        badge: row.plan ? row.plan : null,
+        hint: null,
       }
     }
     const amountText =
@@ -409,34 +434,90 @@ function BalanceCard({ card, onToggle, onRefresh, refreshing }) {
           jsx(StateDot, { tone: card.tone }),
           jsx('span', {
             style: { fontSize: 14, fontWeight: 600, color: 'var(--ui-text-primary)' },
-            children: card.provider_id,
+            children: card.name ?? card.provider_id,
           }),
           jsx('span', { style: { fontSize: 12, color: 'var(--ui-text-tertiary)' }, children: card.stateLabel }),
           jsx('span', { style: { flex: 1 } }),
           card.badge ? jsx(Badge, { text: card.badge, color: toneColor(card.tone) }) : null,
         ],
       }),
-      jsx('div', {
-        key: 'amount',
-        style: { display: 'flex', alignItems: 'baseline', gap: 6 },
-        children: jsx('span', {
-          style: {
-            fontSize: 28,
-            fontWeight: 600,
-            letterSpacing: '-0.02em',
-            color: 'var(--ui-text-primary)',
-            fontVariantNumeric: 'tabular-nums',
-          },
-          children: card.amountText,
-        }),
-      }),
+      card.kind === 'quota'
+        ? jsx('div', {
+            key: 'quota-windows',
+            style: { display: 'flex', flexDirection: 'column', gap: 10, margin: '8px 0' },
+            children: (card.windows ?? []).map((win, idx) => {
+              const rem = win.remaining_percent ?? (win.used_percent != null ? Math.max(0, 100 - win.used_percent) : null)
+              const barColor = rem == null ? 'var(--ui-border)' : rem < 15 ? 'var(--ui-red)' : rem < 35 ? 'var(--ui-orange)' : 'var(--ui-green)'
+              return jsx('div', {
+                key: `win-${idx}`,
+                style: { display: 'flex', flexDirection: 'column', gap: 4 },
+                children: [
+                  jsx('div', {
+                    style: { display: 'flex', justifyContent: 'space-between', fontSize: 12 },
+                    children: [
+                      jsx('span', { style: { fontWeight: 500, color: 'var(--ui-text-primary)' }, children: win.label }),
+                      jsx('span', {
+                        style: { color: barColor, fontWeight: 600, fontVariantNumeric: 'tabular-nums' },
+                        children: rem != null ? `剩 ${Math.round(rem)}%` : '—',
+                      }),
+                    ],
+                  }),
+                  jsx('div', {
+                    style: {
+                      width: '100%',
+                      height: 6,
+                      borderRadius: 3,
+                      background: 'var(--ui-border)',
+                      overflow: 'hidden',
+                    },
+                    children: jsx('div', {
+                      style: {
+                        width: `${rem ?? 0}%`,
+                        height: '100%',
+                        borderRadius: 3,
+                        background: barColor,
+                        transition: 'width 0.3s ease',
+                      },
+                    }),
+                  }),
+                  win.reset_at
+                    ? jsx('div', {
+                        style: { fontSize: 11, color: 'var(--ui-text-tertiary)' },
+                        children: `重置时间：${new Date(win.reset_at).toLocaleString('zh-CN', { hour12: false, month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`,
+                      })
+                    : null,
+                ],
+              })
+            }),
+          })
+        : jsx('div', {
+            key: 'amount',
+            style: { display: 'flex', alignItems: 'baseline', gap: 6 },
+            children: jsx('span', {
+              style: {
+                fontSize: 28,
+                fontWeight: 600,
+                letterSpacing: '-0.02em',
+                color: 'var(--ui-text-primary)',
+                fontVariantNumeric: 'tabular-nums',
+              },
+              children: card.amountText,
+            }),
+          }),
+      card.details?.length
+        ? jsx('div', {
+            key: 'details',
+            style: { fontSize: 11.5, color: 'var(--ui-text-secondary)', display: 'flex', flexDirection: 'column', gap: 2 },
+            children: card.details.map((d, i) => jsx('span', { key: i, children: `💡 ${d}` })),
+          })
+        : null,
       card.hint
         ? jsx('div', { key: 'hint', style: { fontSize: 11.5, color: 'var(--ui-text-tertiary)' }, children: card.hint })
         : null,
       jsx(ToggleRow, {
         key: 'toggle',
-        label: '泡泡显示余额',
-        description: '关闭后宠物泡泡不再显示该家的余额（写入 bubble.balance_providers）',
+        label: card.kind === 'quota' ? '泡泡显示额度' : '泡泡显示余额',
+        description: '关闭后 Pet 泡泡不再显示该家的状态（写入 bubble.balance_providers）',
         checked: card.shownInBubble,
         onChange: (on) => onToggle(card.provider_id, on),
       }),
@@ -447,7 +528,7 @@ function BalanceCard({ card, onToggle, onRefresh, refreshing }) {
           variant: 'ghost',
           disabled: refreshing,
           onClick: onRefresh,
-          children: refreshing ? '刷新中…' : '刷新余额',
+          children: refreshing ? '刷新中…' : (card.kind === 'quota' ? '刷新额度' : '刷新余额'),
         }),
       }),
     ],
@@ -753,16 +834,48 @@ function PricingTables({ pricing }) {
 // page assembly + wiring factory
 // ---------------------------------------------------------------------------
 
+export function profileBackendView(result, profile = 'default') {
+  const row = (result?.plugins ?? []).find(item => item.name === 'pet-wallet' || item.key === 'pet-wallet' || item.name === 'whale-widget' || item.key === 'whale-widget')
+  if (!row) return { ready: false, title: '当前 profile 未安装 Pet Wallet 后端',
+    description: `当前 profile：${profile}。请切换到已安装的 profile，或在插件页面为此 profile 安装 Agent 半部。` }
+  if (row.status !== 'enabled') return { ready: false, title: '当前 profile 未启用 Pet Wallet 后端',
+    description: `当前 profile：${profile}。请在插件页面检查 Agent 开关。` }
+  return { ready: true }
+}
+
 function DashboardPage({ deps }) {
-  const health = useValue(deps.atoms.$health)
+  const profile = useValue(deps.$profile) || 'default'
+  const connection = useValue(deps.$connection) || 'local'
   const version = useValue(deps.$version)
   const days = useValue(deps.$chartDays)
   const selected = useValue(deps.atoms.$bubbleProviders)
   const refreshing = useValue(deps.$refreshing)
   const queryClient = useQueryClient()
 
+  const availability = useQuery({
+    queryKey: ['whale-dashboard', connection, profile, 'backend', version],
+    queryFn: () => deps.host.request('plugins.manage', { action: 'list', profile }),
+    refetchInterval: 60_000,
+    refetchOnMount: 'always',
+    staleTime: 0,
+    retry: 1,
+  })
+  const backend = availability.data ? profileBackendView(availability.data, profile) : null
+  const healthQuery = useQuery({
+    queryKey: ['whale-dashboard', connection, profile, 'health', version],
+    queryFn: () => deps.rest('/health'),
+    enabled: backend?.ready === true,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    retry: 1,
+  })
+  const ready = backend?.ready === true && healthQuery.isSuccess
+  const health = { state: healthQuery.isSuccess ? (healthQuery.data?.ok ? 'ok' : 'degraded')
+    : healthQuery.error ? 'unreachable' : 'checking', detail: healthQuery.data?.ledger_error }
+
   const providers = useQuery({
-    queryKey: ['whale-dashboard', 'providers', version],
+    enabled: ready,
+    queryKey: ['whale-dashboard', connection, profile, 'providers', version],
     queryFn: () => deps.rest('/providers/status'),
     refetchInterval: 60_000,
     refetchOnMount: 'always',
@@ -770,7 +883,8 @@ function DashboardPage({ deps }) {
     retry: 1,
   })
   const summary = useQuery({
-    queryKey: ['whale-dashboard', 'summary', version, days],
+    enabled: ready,
+    queryKey: ['whale-dashboard', connection, profile, 'summary', version, days],
     queryFn: () => deps.rest(`/usage/summary?days=${days}`),
     refetchInterval: 30_000,
     refetchOnMount: 'always',
@@ -778,7 +892,8 @@ function DashboardPage({ deps }) {
     retry: 1,
   })
   const turns = useQuery({
-    queryKey: ['whale-dashboard', 'turns', version],
+    enabled: ready,
+    queryKey: ['whale-dashboard', connection, profile, 'turns', version],
     queryFn: () => deps.rest('/usage/turns?limit=20'),
     refetchInterval: 60_000,
     refetchOnMount: 'always',
@@ -786,7 +901,8 @@ function DashboardPage({ deps }) {
     retry: 1,
   })
   const pricing = useQuery({
-    queryKey: ['whale-dashboard', 'pricing', version],
+    enabled: ready,
+    queryKey: ['whale-dashboard', connection, profile, 'pricing', version],
     queryFn: () => deps.rest('/pricing'),
     refetchInterval: 300_000,
     staleTime: 60_000,
@@ -823,6 +939,7 @@ function DashboardPage({ deps }) {
     .map((row) => row.provider_id)
 
   const setBubbleShow = (providerId, on) => {
+    if ((deps.$profile.get() || 'default') !== profile || (deps.$connection.get() || 'local') !== connection) return
     const previous = normalizeSelectedProviders(deps.atoms.$bubbleProviders.get?.() ?? [])
     const next = toggleBubbleProvider(previous, providerId, on, allConfiguredIds)
     deps.atoms.$bubbleProviders.set(next) // optimistic runtime mirror (bubble updates now)
@@ -830,13 +947,14 @@ function DashboardPage({ deps }) {
       deps.rest('/config', { method: 'PUT', body: JSON.stringify({ bubble: { balance_providers: next } }) }),
     )
       .then((merged) => {
+        if ((deps.$profile.get() || 'default') !== profile || (deps.$connection.get() || 'local') !== connection) return
         const persisted = merged?.bubble?.balance_providers
         if (Array.isArray(persisted)) deps.atoms.$bubbleProviders.set(normalizeSelectedProviders(persisted))
       })
       .catch(() => {
         deps.atoms.$bubbleProviders.set(previous) // revert on failure
         try {
-          deps.host?.notify?.({ message: 'Whale Wallet：泡泡显示列表写入失败' })
+          deps.host?.notify?.({ message: 'Pet Wallet：泡泡显示列表写入失败' })
         } catch {
           /* toast is best-effort */
         }
@@ -862,7 +980,7 @@ function DashboardPage({ deps }) {
             letterSpacing: '-0.02em',
             color: 'var(--ui-text-primary)',
           },
-          children: '🐋 Whale Wallet 用量',
+          children: `🐾 Pet Wallet 用量 · ${profile}`,
         }),
         jsx(HealthDot, { health }),
         jsx('span', { style: { flex: 1 } }),
@@ -870,6 +988,21 @@ function DashboardPage({ deps }) {
       ],
     }),
   )
+
+  const unavailable = availability.error
+    ? { title: '无法检查当前 profile 的插件状态', description: String(availability.error?.message ?? availability.error) }
+    : backend && !backend.ready ? backend
+    : healthQuery.error ? { title: '当前 profile 的记账后端尚未就绪',
+      description: `当前 profile：${profile}。${healthQuery.error?.message ?? healthQuery.error}` }
+    : null
+  if (unavailable || !ready) {
+    sections.push(jsx(unavailable ? ErrorState : EmptyState, {
+      key: 'backend-state', title: unavailable?.title ?? '正在连接当前 profile 的记账后端',
+      description: unavailable?.description ?? `当前 profile：${profile}`,
+      children: jsx(Button, { variant: 'secondary', onClick: refreshAll, children: '重新检查' }),
+    }))
+    return jsx('div', { style: { display: 'flex', flexDirection: 'column', gap: 20, padding: 16 }, children: sections })
+  }
 
   if (providers.error && !providers.data) {
     sections.push(
@@ -897,7 +1030,7 @@ function DashboardPage({ deps }) {
       }),
     )
   } else {
-    sections.push(sectionTitle('订阅余额', 'balances-title'))
+    sections.push(sectionTitle('订阅与额度', 'balances-title'))
     sections.push(
       jsx('div', {
         key: 'cards',
@@ -1020,7 +1153,7 @@ function DashboardPage({ deps }) {
 function ChipNavigate({ children, onNavigate }) {
   return jsx('span', {
     className: 'whale-widget-chip-nav',
-    title: onNavigate ? '打开 Whale Wallet 用量面板' : undefined,
+    title: onNavigate ? '打开 Pet Wallet 用量面板' : undefined,
     onClick: onNavigate
       ? (event) => {
           event?.preventDefault?.()
@@ -1051,7 +1184,9 @@ export function createDashboard({ rest, host, atoms }) {
   const $chartDays = atom(7)
   const $refreshing = atom(false)
 
-  const deps = { rest, host, atoms: atoms ?? {}, $version, $chartDays, $refreshing }
+  const $profile = host?.state?.profile ?? atom('default')
+  const $connection = host?.state?.connectionId ?? atom('local')
+  const deps = { rest, host, atoms: atoms ?? {}, $profile, $connection, $version, $chartDays, $refreshing }
 
   const contribution = {
     id: 'dashboard',

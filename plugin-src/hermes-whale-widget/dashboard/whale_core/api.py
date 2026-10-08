@@ -35,7 +35,7 @@ from .logging_setup import get_logger, setup_logging
 
 log = get_logger("api")
 
-PLUGIN_NAME = "whale-widget"
+PLUGIN_NAME = "pet-wallet"
 
 router = APIRouter()
 router.include_router(wait_api.router)  # M8: /ingest/wait-event + /wait-state (cross-package contract)
@@ -69,7 +69,11 @@ def _ensure_runtime() -> _Runtime:
         _rt.data_dir = config.data_dir()
         setup_logging(_rt.data_dir, also_stderr=False)
         try:
-            _rt.conn = db.connect(_rt.data_dir / "whale.db")
+            db_file = _rt.data_dir / "pet-wallet.db"
+            legacy_db = _rt.data_dir / "whale.db"
+            if not db_file.exists() and legacy_db.exists():
+                legacy_db.rename(db_file)
+            _rt.conn = db.connect(db_file)
             _rt.schema_version = migrations.migrate(_rt.conn)
         except db.LedgerCorruptError as exc:
             _rt.conn = None
@@ -77,7 +81,7 @@ def _ensure_runtime() -> _Runtime:
             _rt.ledger_error = str(exc)
         _rt.started = True
         log.info(
-            "whale-widget runtime started: data_dir=%s schema_version=%s ledger_error=%s",
+            "pet-wallet runtime started: data_dir=%s schema_version=%s ledger_error=%s",
             _rt.data_dir, _rt.schema_version, _rt.ledger_error,
         )
         poller.ensure_started(_rt)

@@ -87,7 +87,7 @@ def test_custom_price_feeds_settlement(client, hermes_home):
     from whale_core.migrations import migrate
 
     client.put(f"{MOUNT_PREFIX}/pricing/custom", json={"model": "my-custom-model", "pricing": VALID_QUOTE})
-    conn = db_connect(hermes_home / "whale-widget" / "whale.db")
+    conn = db_connect(hermes_home / "pet-wallet" / "pet-wallet.db")
     migrate(conn)
     try:
         result = ingest_turn(conn, _turn())  # 1M miss + 1M out → 2 + 8 = 10 CNY
@@ -109,7 +109,7 @@ def test_unknown_model_stays_null_not_zero(client, hermes_home):
     from whale_core.db import connect as db_connect
     from whale_core.migrations import migrate
 
-    conn = db_connect(hermes_home / "whale-widget" / "whale.db")
+    conn = db_connect(hermes_home / "pet-wallet" / "pet-wallet.db")
     migrate(conn)
     try:
         ingest_turn(conn, _turn(model="totally-unknown-model"))

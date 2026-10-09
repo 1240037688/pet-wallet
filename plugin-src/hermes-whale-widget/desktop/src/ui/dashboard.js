@@ -944,7 +944,7 @@ function DashboardPage({ deps }) {
     const next = toggleBubbleProvider(previous, providerId, on, allConfiguredIds)
     deps.atoms.$bubbleProviders.set(next) // optimistic runtime mirror (bubble updates now)
     void Promise.resolve(
-      deps.rest('/config', { method: 'PUT', body: JSON.stringify({ bubble: { balance_providers: next } }) }),
+      deps.rest('/config', { method: 'PUT', body: { bubble: { balance_providers: next } } }),
     )
       .then((merged) => {
         if ((deps.$profile.get() || 'default') !== profile || (deps.$connection.get() || 'local') !== connection) return

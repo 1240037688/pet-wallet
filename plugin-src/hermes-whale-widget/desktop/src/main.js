@@ -226,9 +226,10 @@ export default {
     const normalizer = createNormalizer()
     let tracker = createTurnTracker()
 
-    // ctx.rest adapter — POST/PUT shape (method/body JSON) mirrors the fetch-style
-    // opts bag; exact production shape re-verified at the M5 real-machine smoke.
-    const restPost = (path, body) => ctx.rest(path, { method: 'POST', body: JSON.stringify(body) })
+    // ctx.rest adapter — Hermes plugin SDK ctx.rest passes body directly to
+    // electron fetchJson, which internally performs JSON.stringify(options.body).
+    // Passing raw objects prevents double-serialization ("\"{\\\"turns\\\":...}\"").
+    const restPost = (path, body) => ctx.rest(path, { method: 'POST', body: typeof body === 'string' ? JSON.parse(body) : body })
     const restGet = (path) => ctx.rest(path)
 
     const getOwner = () => JSON.stringify([host.state?.connectionId?.get?.() ?? 'local', host.state?.profile?.get?.() ?? 'default'])

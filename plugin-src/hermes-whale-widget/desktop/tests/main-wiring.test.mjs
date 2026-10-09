@@ -326,7 +326,7 @@ test('clarify tool.start/complete → POST /ingest/wait-event open/close; other 
 
   const waitCalls = restCalls.filter((c) => c.path === '/ingest/wait-event')
   assert.deepEqual(
-    waitCalls.map((c) => JSON.parse(c.body)),
+    waitCalls.map((c) => (typeof c.body === 'string' ? JSON.parse(c.body) : c.body)),
     [
       { kind: 'question', phase: 'open', tool_id: 't1', session_id: 's9' },
       { kind: 'question', phase: 'close', tool_id: 't1', session_id: 's9' },

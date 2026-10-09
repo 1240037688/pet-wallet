@@ -3024,7 +3024,7 @@ function DashboardPage({ deps }) {
     const next = toggleBubbleProvider(previous, providerId, on, allConfiguredIds);
     deps.atoms.$bubbleProviders.set(next);
     void Promise.resolve(
-      deps.rest("/config", { method: "PUT", body: JSON.stringify({ bubble: { balance_providers: next } }) })
+      deps.rest("/config", { method: "PUT", body: { bubble: { balance_providers: next } } })
     ).then((merged) => {
       if ((deps.$profile.get() || "default") !== profile || (deps.$connection.get() || "local") !== connection) return;
       const persisted = merged?.bubble?.balance_providers;
@@ -3355,7 +3355,7 @@ var main_default = {
   register(ctx) {
     const normalizer = createNormalizer();
     let tracker = createTurnTracker();
-    const restPost = (path, body) => ctx.rest(path, { method: "POST", body: JSON.stringify(body) });
+    const restPost = (path, body) => ctx.rest(path, { method: "POST", body: typeof body === "string" ? JSON.parse(body) : body });
     const restGet = (path) => ctx.rest(path);
     const getOwner = () => JSON.stringify([host.state?.connectionId?.get?.() ?? "local", host.state?.profile?.get?.() ?? "default"]);
     const trackers = /* @__PURE__ */ new Map([[getOwner(), tracker]]);

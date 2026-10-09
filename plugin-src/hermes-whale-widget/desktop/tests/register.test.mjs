@@ -121,7 +121,8 @@ test('M1 pipeline: gateway events → settled turn → POST /ingest/turn', async
   const { ctx, handlers, disposed, restCalls } = makeCtx({
     restImpl: (p, opts) => {
       if (p === '/ingest/turn') {
-        postBodies.push(JSON.parse(opts.body))
+        const bodyObj = typeof opts?.body === 'string' ? JSON.parse(opts.body) : opts?.body
+        postBodies.push(bodyObj)
         return { status: 'accepted', accepted: 1, duplicate: 0 }
       }
       if (p === '/health') return { ok: true, plugin: 'pet-wallet', version: '0.1.0', schema_version: 1 }
@@ -164,7 +165,8 @@ test('M1 reconnect handling: after_reconnect tag on the first post-reconnect set
   const { ctx, handlers, disposed } = makeCtx({
     restImpl: (p, opts) => {
       if (p === '/ingest/turn') {
-        postBodies.push(JSON.parse(opts.body))
+        const bodyObj = typeof opts?.body === 'string' ? JSON.parse(opts.body) : opts?.body
+        postBodies.push(bodyObj)
         return { status: 'accepted', accepted: 1, duplicate: 0 }
       }
       if (p === '/health') return { ok: true, plugin: 'pet-wallet', version: '0.1.0', schema_version: 1 }
